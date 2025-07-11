@@ -122,7 +122,7 @@ int main(int argc, char **argv){
     }
   }
 
-  auto inputCalFile = std::fstream(inputDatFilePath, std::ios::in | std::ios::out | std::ios::binary);
+  auto inputCalFile = std::fstream(inputDatFilePath, std::ios::in | std::ios::binary);
   LogThrowIf(inputCalFile.fail());
 
   BeamMonitorEventBuffer bmEvent{};
