@@ -122,8 +122,8 @@ int main(int argc, char **argv){
     }
   }
 
-  auto inputCalFile = std::fstream(inputDatFilePath, std::ios::in | std::ios::binary);
-  LogThrowIf(inputCalFile.fail());
+  auto inputDatFile = std::fstream(inputDatFilePath, std::ios::in | std::ios::binary);
+  LogThrowIf(inputDatFile.fail());
 
   BeamMonitorEventBuffer bmEvent{};
 
@@ -132,22 +132,22 @@ int main(int argc, char **argv){
   uint64_t nEntries{0};
 
   LogInfo << "Checking the nb of entries..." << std::endl;
-  offset = seek_first_evt_header(inputCalFile, 0, verbose);
-  while( not inputCalFile.eof() ) {
+  offset = seek_first_evt_header(inputDatFile, 0, verbose);
+  while( not inputDatFile.eof() ) {
     nEntries++;
 
     if( nMaxEvents != -1 and nEntries == nMaxEvents ){ break; }
 
     // check for event header if this is the first board
-    if( not read_evt_header(inputCalFile, offset, verbose) ){ break; }
+    if( not read_evt_header(inputDatFile, offset, verbose) ){ break; }
 
-    bmEvent.readTuple( read_de10_header(inputCalFile, offset, verbose) );
+    bmEvent.readTuple( read_de10_header(inputDatFile, offset, verbose) );
 
     if( not bmEvent.isGood ){ continue; }
 
     offset = bmEvent.offset;
-    read_event(inputCalFile, offset, int(bmEvent.eventSize), verbose, false);
-    offset = (uint64_t) inputCalFile.tellg() + padding_offset + 8;
+    read_event(inputDatFile, offset, int(bmEvent.eventSize), verbose, false);
+    offset = (uint64_t) inputDatFile.tellg() + padding_offset + 8;
 
   }
 
@@ -201,25 +201,25 @@ int main(int argc, char **argv){
   }
 
   LogInfo << "Reading " << nEntries << " entries..." << std::endl;
-  inputCalFile = std::fstream(inputDatFilePath, std::ios::in | std::ios::out | std::ios::binary);
-  offset = seek_first_evt_header(inputCalFile, 0, verbose);
+  inputDatFile = std::fstream(inputDatFilePath, std::ios::in | std::ios::binary);
+  offset = seek_first_evt_header(inputDatFile, 0, verbose);
   auto iEvent{nEntries}; iEvent = 0;
   auto nWriten{iEvent};
-  while( not inputCalFile.eof() ) {
+  while( not inputDatFile.eof() ) {
     iEvent++;
     GenericToolbox::displayProgressBar(iEvent, nEntries, "Writing events...");
 
     if( iEvent == nEntries ){ break; }
 
     // check for event header if this is the first board
-    if( not read_evt_header(inputCalFile, offset, verbose) ){ break; }
+    if( not read_evt_header(inputDatFile, offset, verbose) ){ break; }
 
-    bmEvent.readTuple( read_de10_header(inputCalFile, offset, verbose) );
+    bmEvent.readTuple( read_de10_header(inputDatFile, offset, verbose) );
 
     if( not bmEvent.isGood ){ continue; }
 
     offset = bmEvent.offset;
-    auto data = read_event(inputCalFile, offset, int(bmEvent.eventSize), verbose, false);
+    auto data = read_event(inputDatFile, offset, int(bmEvent.eventSize), verbose, false);
     data = reorder_DUNE(data);
 
     // should be the amount of channel
@@ -290,7 +290,7 @@ int main(int argc, char **argv){
     }
 
     // next offset
-    offset = static_cast<uint64_t>(inputCalFile.tellg()) + padding_offset + 8;
+    offset = static_cast<uint64_t>(inputDatFile.tellg()) + padding_offset + 8;
 
   }
   if( not skipEventTree ) {
