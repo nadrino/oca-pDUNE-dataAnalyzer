@@ -263,7 +263,9 @@ int main(int argc, char **argv){
           bmEvent.xBarycenter[iDet] /= bmEvent.peakZeroSupprSum[iDet];
           bmEvent.xBarycenter[iDet] -= double(N_CHANNELS)/2.;
 
-          bmEvent.yBarycenter += std::sin(double(iDet)*15.*M_PI/180.)*bmEvent.xBarycenter[iDet]/2.; // 2 detectors will give this info
+          // bmEvent.yBarycenter += std::sin(double(iDet)*15.*M_PI/180.)*bmEvent.xBarycenter[iDet]/2.; // 2 detectors will give this info
+          if( iDet == 2 ){ bmEvent.yBarycenter += std::sin(15.*M_PI/180.)*bmEvent.xBarycenter[iDet]/2.; }
+          if( iDet == 1 ){ bmEvent.yBarycenter += std::sin(30.*M_PI/180.)*bmEvent.xBarycenter[iDet]/2.; }
         }
       }
     }
