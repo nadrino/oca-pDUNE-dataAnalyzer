@@ -76,11 +76,14 @@ else
     # check if make was successful
     if [ $? -ne 0 ]
     then
-        echo -e "  Make failed. Stopping execution.\n"
+        echo "  Make failed. Stopping execution."
+        echo ""
         cd $pwd # go back to the original directory
-        return 1
+        exit 0
     fi
-
-    echo -e "  Compilation finished successfully!\n"
+    
     cd $pwd # go back to the original directory
+    echo "  Compilation successful!"
+    echo ""
+
 fi
