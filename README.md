@@ -1,4 +1,4 @@
-    # pDUNE Oca Data Analyzer
+# pDUNE Oca Data Analyzer
 
 Software to analyze the data coming from the beam NP02 beam plug tracker.
 The DAQ is [here](https://github.com/emanuele-villa/oca-pDUNE-DAQ/tree/master).
@@ -43,13 +43,13 @@ It can also compile the code, see --help option to show the available options.
 Example of usage:
     
 ```bash
-./analyzeRuns.sh -j json/mysettings.json -r SCD_RUN00021_CAL_20240826_160235.dat 
+./analyzeRun.sh -j json/mysettings.json -r <filename>
 ```
 
 Or you can use the run number(s), where f and l mean first and last:
         
 ```bash
-./analyzeRuns.sh -f 10 -l 12 -j json/mysettings.json
+./analyzeRun.sh -f 200 -l 202 -j json/mysettings.json
 ```
 
 Use only -f to analyze a single run.
