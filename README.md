@@ -1,4 +1,4 @@
-# pDUNE Oca Data Analyzer
+    # pDUNE Oca Data Analyzer
 
 Software to analyze the data coming from the beam NP02 beam plug tracker.
 The DAQ is [here](https://github.com/emanuele-villa/oca-pDUNE-DAQ/tree/master).
@@ -15,7 +15,7 @@ You can also check if compilation succeeds, even though it's run in all other sc
 ```bash
 git clone https://github.com/emanuele-villa/oca-pDUNE-dataAnalyzer.git
 ./scripts/manage-submodules.sh --up
-./scripts/compile.sh
+source scripts/compile.sh
 ```
 
 To use the code in your local machine, you need to have:
