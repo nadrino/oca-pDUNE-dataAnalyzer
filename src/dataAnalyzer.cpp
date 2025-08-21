@@ -20,6 +20,7 @@
 #include "TApplication.h"
 #include "TStyle.h"
 #include "TSystem.h"
+#include <cmath>
 
 #include "CmdLineParser.h"
 #include "Logger.h"
@@ -298,13 +299,14 @@ int main(int argc, char* argv[]) {
     const double detAnglesDeg[geomDetN] = {-15.0, +15.0, 0.0};
     double detAnglesRad[geomDetN];
     for (int i=0;i<geomDetN;i++) detAnglesRad[i] = detAnglesDeg[i]*M_PI/180.0;
-    double channelPitch = 1.0; // TODO: replace with real pitch (mm) if known
+    // Physical pitch: 10 cm across strip-normal over nChannels
+    double channelPitch = 100.0 / nChannels; // mm per strip
     
-    // Histogram to accumulate reconstructed centers
-    TH2F *h_recoCenter = new TH2F("h_recoCenter", "Interpolated centers;X (arb);Y (arb)", 100, -500, 500, 100, -200, 200);
+    // Histogram to accumulate reconstructed centers (in mm)
+    TH2F *h_recoCenter = new TH2F("h_recoCenter", "Interpolated centers;X [mm];Y [mm]", 100, -60.0, 60.0, 100, -60.0, 60.0);
     TGraph *g_recoCenters = new TGraph();
     g_recoCenters->SetName("g_recoCenters");
-    g_recoCenters->SetTitle("Interpolated centers;X (arb);Y (arb)");
+    g_recoCenters->SetTitle("Interpolated centers;X [mm];Y [mm]");
     g_recoCenters->SetMarkerStyle(20);
     g_recoCenters->SetMarkerSize(0.5);
 
@@ -351,15 +353,15 @@ int main(int argc, char* argv[]) {
                 h_amplitude->at(det)->Fill(this_event->GetPeak(det, ch) - this_event->GetBaseline(det, ch));
             }
             // Reconstruct (x,y) from projections u_i = x cosθ_i + y sinθ_i, with u_i centered around detector origin.
-            // Center channel indices so that central channel maps to u=0.
-            double centerOffset = (nChannels/2.0) * channelPitch;
+            // Center channel indices so that strip centers map to u = 0 at detector center.
+            double centerOffset = (nChannels * channelPitch) / 2.0; // 50 mm
             // Accumulate for least squares if >=2 detectors
             double Scc=0, Sss=0, Scs=0, Su_c=0, Su_s=0; int used=0;
             // Temporary storage for exactly-2-detector direct solve
             double c_a=0,s_a=0,u_a=0,c_b=0,s_b=0,u_b=0; int pairCount=0;
             for (int i=0;i<geomDetN;i++) {
                 if (firstTrigChan[i] >= 0) {
-                    double u = firstTrigChan[i]*channelPitch - centerOffset; // projection measurement along detector axis
+                    double u = ( (firstTrigChan[i] + 0.5) * channelPitch ) - centerOffset; // mm
                     double c = cos(detAnglesRad[i]);
                     double s = sin(detAnglesRad[i]);
                     Scc += c*c; Sss += s*s; Scs += c*s; Su_c += u*c; Su_s += u*s; used++;
