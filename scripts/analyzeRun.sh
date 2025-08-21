@@ -141,7 +141,8 @@ do
   echo "Looking for files by run number"
   echo "runit: $runit"
   runit_5d=$(printf "%05d" "$runit")
-  filePath=$(find "$inputDirectory" -name "SCD_RUN${runit_5d}_*.dat")
+  # Use shared finder utility
+  filePath=$($SCRIPTS_DIR/findRun.sh -r "$runit" -i "$inputDirectory" | tail -n 1)
   
   # Stop execution if the selected run is not present in the input directory
   if [ -z "$filePath" ]
@@ -150,8 +151,8 @@ do
       continue
   fi
 
-  echo "For this run number, found the following file(s):"
-  echo $filePath
+  echo "For this run number, found path(s):"
+  echo "$filePath"
 
   echo "Dealing with file: "$filePath
   echo "outputDirectory: "$outputDirectory
