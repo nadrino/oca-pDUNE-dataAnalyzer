@@ -20,6 +20,7 @@
 #include "TApplication.h"
 #include "TStyle.h"
 #include "TSystem.h"
+#include <cmath>
 
 #include <nlohmann/json.hpp>
 
@@ -355,6 +356,22 @@ int main(int argc, char* argv[]) {
     int hitsInEvent = 0;
     int triggeredEvents = 0;
     
+    // Geometry / interpolation setup for detectors 0 (-15°), 1 (+15°), 2 (0°)
+    const int geomDetN = 3;
+    const double detAnglesDeg[geomDetN] = {-15.0, +15.0, 0.0};
+    double detAnglesRad[geomDetN];
+    for (int i=0;i<geomDetN;i++) detAnglesRad[i] = detAnglesDeg[i]*M_PI/180.0;
+    // Physical pitch: 10 cm across strip-normal over nChannels
+    double channelPitch = 100.0 / nChannels; // mm per strip
+    
+    // Histogram to accumulate reconstructed centers (in mm)
+    TH2F *h_recoCenter = new TH2F("h_recoCenter", "Interpolated centers;X [mm];Y [mm]", 100, -60.0, 60.0, 100, -60.0, 60.0);
+    TGraph *g_recoCenters = new TGraph();
+    g_recoCenters->SetName("g_recoCenters");
+    g_recoCenters->SetTitle("Interpolated centers;X [mm];Y [mm]");
+    g_recoCenters->SetMarkerStyle(20);
+    g_recoCenters->SetMarkerSize(0.5);
+
     for (int entryit = 0; entryit < limit; entryit++) {
 
         hitsInEvent = 0;
@@ -381,7 +398,6 @@ int main(int argc, char* argv[]) {
                 }
                 // LogInfo << "DetId " << detit << ", channel " << chit << ", peak: " << this_event->GetPeak(detit, chit) << ", baseline: " << this_event->GetBaseline(detit, chit) << ", sigma: " << this_event->GetSigma(detit, chit) << "\t";
                 h_rawPeak->at(detit)->at(chit)->Fill(this_event->GetPeak(detit, chit));
-
             }
         }
 
@@ -390,30 +406,68 @@ int main(int argc, char* argv[]) {
         if (verbose) this_event->PrintOverview();        
         if (debug) this_event->PrintInfo(); // this should rather be debug
 
-
         std::vector <std::pair<int, int>> triggeredHits = this_event->GetTriggeredHits();
         if (triggeredHits.size() > 0){
+            int firstTrigChan[geomDetN];
+            for (int i=0;i<geomDetN;i++) firstTrigChan[i] = -1;
             triggeredEvents++;
-            for (int hitit = 0; hitit < triggeredHits.size(); hitit++) {
-                hitsInEvent++;
-                int det = triggeredHits.at(hitit).first;
-                int ch = triggeredHits.at(hitit).second;
-                
+            for (auto &hit : triggeredHits) {
+                int det = hit.first;
+                int ch  = hit.second;
                 // Skip edge channels if masking is enabled
                 if (maskEdgeChannels && isEdgeChannel(ch)) {
                     continue;
                 }
-                
+                if (det < geomDetN && firstTrigChan[det] < 0) firstTrigChan[det] = ch;
+                hitsInEvent++;
                 float amplitude = this_event->GetPeak(det, ch) - this_event->GetBaseline(det, ch);
                 h_firingChannels->at(det)->Fill(ch);
                 h_amplitude->at(det)->Fill(amplitude);
                 h_amplitudeVsChannel->at(det)->Fill(ch, amplitude);
             }
+            // Reconstruct (x,y) from projections u_i = x cosθ_i + y sinθ_i, with u_i centered around detector origin.
+            // Center channel indices so that strip centers map to u = 0 at detector center.
+            double centerOffset = (nChannels * channelPitch) / 2.0; // 50 mm
+            // Accumulate for least squares if >=2 detectors
+            double Scc=0, Sss=0, Scs=0, Su_c=0, Su_s=0; int used=0;
+            // Temporary storage for exactly-2-detector direct solve
+            double c_a=0,s_a=0,u_a=0,c_b=0,s_b=0,u_b=0; int pairCount=0;
+            for (int i=0;i<geomDetN;i++) {
+                if (firstTrigChan[i] >= 0) {
+                    double u = ( (firstTrigChan[i] + 0.5) * channelPitch ) - centerOffset; // mm
+                    double c = cos(detAnglesRad[i]);
+                    double s = sin(detAnglesRad[i]);
+                    Scc += c*c; Sss += s*s; Scs += c*s; Su_c += u*c; Su_s += u*s; used++;
+                    if (pairCount==0) {c_a=c; s_a=s; u_a=u; pairCount=1;} else if (pairCount==1){c_b=c; s_b=s; u_b=u; pairCount=2;}
+                }
+            }
+            double cx=0, cy=0; bool haveXY=false;
+            if (used >= 2) {
+                if (used == 2) {
+                    // Direct 2x2 solve
+                    double det = c_a*s_b - s_a*c_b; // = sin(theta_b - theta_a)
+                    if (fabs(det) > 1e-9) {
+                        cx = ( u_a*s_b - s_a*u_b)/det;
+                        cy = ( c_a*u_b - u_a*c_b)/det;
+                        haveXY = true;
+                    }
+                } else { // used ==3 (or more if extended)
+                    double det = Scc*Sss - Scs*Scs;
+                    if (fabs(det) > 1e-12) {
+                        cx = ( Sss*Su_c - Scs*Su_s)/det;
+                        cy = ( Scc*Su_s - Scs*Su_c)/det;
+                        haveXY = true;
+                    }
+                }
+            }
+            if (haveXY) {
+                h_recoCenter->Fill(cx, cy);
+                g_recoCenters->SetPoint(g_recoCenters->GetN(), cx, cy);
+            }
         }
 
         h_hitsInEvent->Fill(hitsInEvent);
 
-        // print values minus baseline for this event
         if (debug) this_event->PrintValidHits();      
         
         if (verbose) LogInfo << "Stored entry " << entryit << " in the vector of Events" << std::endl;
@@ -427,7 +481,7 @@ int main(int argc, char* argv[]) {
     LogInfo << "Number of triggered events: " << (double) triggeredEvents/limit *100 << "%" << std::endl;
     
     ///////////////////////////
-
+    
     // plots
 
     // create a canvas
@@ -497,6 +551,12 @@ int main(int argc, char* argv[]) {
 
     TCanvas *c_hitsInEvent = new TCanvas(Form("c_hitsInEvent_Run%s", runNumber.c_str()), Form("Hits in Event (Run %s)", runNumber.c_str()), 800, 600);
 
+    TCanvas *c_recoCenter = new TCanvas("c_recoCenter", "Interpolated Centers", 700, 500);
+    c_recoCenter->cd();
+    h_recoCenter->Draw("COLZ");
+    g_recoCenters->SetMarkerColor(kBlack);
+    g_recoCenters->Draw("P SAME");
+    c_recoCenter->Update();
 
     LogInfo << "Drawing histograms" << std::endl;
     for (int i = 0; i < nDetectors; i++) {
@@ -589,9 +649,11 @@ int main(int argc, char* argv[]) {
         c_amplitude->Update();
         c_amplitude->SaveAs(output_filename_report.c_str());
         
-        // Page 5: Amplitude vs Channel plot
-        c_amplitudeVsChannel->Update();
-        c_amplitudeVsChannel->SaveAs(output_filename_report.c_str());
+        // Page 5: Reconstructed centers heatmap
+        if (c_recoCenter) {
+            c_recoCenter->Update();
+            c_recoCenter->SaveAs(output_filename_report.c_str());
+        }
         
         // Page 6: Hits in event plot (final page)
         c_hitsInEvent->Update();

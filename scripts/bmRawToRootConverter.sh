@@ -73,9 +73,8 @@ echo -e "Settings file found, full path is: $settingsFile \n"
 inputDirectory=$(awk -F'"' '/inputDirectory/{print $4}' "$settingsFile")
 outputDirectory=$(awk -F'"' '/outputDirectory/{print $4}' "$settingsFile")
 
-# Find the input file in the input directory by run number (5-digit padded)
-run_padded=$(printf "%05d" "$runNumber")
-inputFile=$(find "$inputDirectory" -name "SCD_RUN${run_padded}_*.dat" | head -n 1)
+# Find the input file using the shared finder
+inputFile=$($SCRIPTS_DIR/findRun.sh -r "$runNumber" -i "$inputDirectory" | tail -n 1)
 
 if [ -z "$inputFile" ]; then
     echo "No input file found for run $runNumber in $inputDirectory."

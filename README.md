@@ -1,78 +1,77 @@
 # pDUNE Oca Data Analyzer
 
-Software to analyze the data coming from the beam NP02 beam plug tracker.
-The DAQ is [here](https://github.com/emanuele-villa/oca-pDUNE-DAQ/tree/master).
-This code has been forked from the one originally written by INFN Perugia.
+Tools to convert, calibrate, analyze, and visualize NP02 beam plug tracker data.
+DAQ repo: https://github.com/emanuele-villa/oca-pDUNE-DAQ
 
-The data can be found at `/eos/user/e/evilla/dune/np02-beam-monitor`, request access to emanuele.villa@cern.ch.
-Ask Emanuele for the url if you want to download from web interface.
+Data location: `/eos/user/e/evilla/dune/np02-beam-monitor`. Request access via emanuele.villa@cern.ch. Ask Emanuele for the web interface URL if preferred.
 
 ## Install
 
-After cloning, the submodules need to be initialized and updated, there is a script for that.
-You can also check if compilation succeeds, even though it's run in all other scripts.
+After cloning, initialize submodules and compile:
 
 ```bash
 git clone https://github.com/emanuele-villa/oca-pDUNE-dataAnalyzer.git
+cd oca-pDUNE-dataAnalyzer
 ./scripts/manage-submodules.sh --up
 source scripts/compile.sh
 ```
 
-To use the code in your local machine, you need to have:
+Requirements:
+- ROOT installed at `/usr/local/`
+- `json.hpp` header available
+- CMake >= 3.17, GCC >= 11 (or recent clang)
 
-- ROOT installed in the standard location, meaning `/usr/local/`,
-- json header: `json.hpp`;
-- cmake (minimum 3.17);
-- gcc version at least 11, or a recent clang;
+## Scripts overview
 
-If needed, install or update these packages.
-In lxplus (recommended), all dependencies are fine when sourcing an image through `source scripts/lxplus-image.sh`. 
-This is done automatically in the `init.sh` script, called by any other script, so it's not needed to run it manually.
+Settings are read from a JSON (e.g., `json/ev-settings.json`) with `inputDirectory` and `outputDirectory`.
 
-## Usage
+On lxplus (recommended), all dependencies are available when sourcing the environment via `scripts/init.sh`, which is invoked by the other scripts; you usually don't need to run it manually.
 
-Scripts handle all the steps of compilation, data conversion and analysis.
-The scripts are located in the `scripts` folder.
-Input and output folders are set in a json file passed through the command line.
-Create your own json file by copying the `settings_template.json` file and modifying it. 
-Input path is already the correct one, choose your local output path.
+- analyzeRun.sh
+	- Batch convert, calibrate (if needed), and analyze run(s).
+	- Calibration policy: use the most recent previous CAL run’s `.cal`; if none, use the nearest later CAL; if the current run is CAL, use its own `.cal`.
 
+- bmRawToRootConverter.sh
+	- Convert `.dat` to ROOT only.
 
-The script `analyzeRuns.sh` is the main script to analyze the data.
-It can also compile the code, see --help option to show the available options.
-Example of usage:
-    
+- evtDisplay.sh
+	- Build and launch the interactive ROOT event display.
+
+- hitsVsSigma.sh
+	- Generate a Hits vs Sigma plot for a run. Similar flags to `analyzeRun.sh`.
+
+## Apps
+
+- PAPERO_convert: raw `.dat` → ROOT
+- calibration: produce channel baseline/sigma/mask `.cal`
+- dataAnalyzer: main analysis producing per-run PDF and ROOT outputs
+- event_display: GUI to browse events; Prev/Next, larger UI; 3 detectors (A,B,C)
+- hits_vs_sigma: counts total hits across events for a sweep of sigma thresholds, with calibration-bad and edge channel masking; saves a PDF
+
+## Usage examples
+
+Analyze a single run by number:
 ```bash
-./analyzeRun.sh -j json/mysettings.json -r <filename>
+./scripts/analyzeRun.sh -f 275 -j json/ev-settings.json
 ```
 
-Or you can use the run number(s), where f and l mean first and last:
-        
+Convert a run by number:
 ```bash
-./analyzeRun.sh -f 200 -l 202 -j json/mysettings.json
+./scripts/bmRawToRootConverter.sh -j json/ev-settings.json -r 275
 ```
 
-Use only -f to analyze a single run.
-Important parameter to consider something a signal is `nSigma`, which is the number of standard deviations above the pedestal to consider a signal. 
-It can be set in the json file, or passed as an argument to the script, e.g. `-s 5` for 5 sigma.
-The app produces a pdf report with the analysis results, and a root file with the data.
-
-There is then an app to convert from raw data to root files, `bmRawToRootConverter.sh`, for further analysis:
-
+Open event display on a run (auto-build; sigma via CLI):
 ```bash
-./bmRawToRootConverter.sh -j json/mysettings.json -r 21
+./scripts/evtDisplay.sh -j json/ev-settings.json -r 275 -s 7
 ```
 
-## Structure
+Hits vs Sigma (sweep 1..15):
+```bash
+./scripts/hitsVsSigma.sh -r 275 -j json/ev-settings.json --smin 1 --smax 15 --sstep 1
+```
 
-The actual steps that are performed by the scripts are:
+## Notes
 
-- compile the code, stopping execution if the compilation fails;
-- convert the raw data into root files using the `PAPERO_convert` executable;
-- create the calibration file, that extracts the pedestal by channel, using the `calibration` executable;
-- read calib and root files and do some analysis, using the `dataAnalyzer   ` executable;
-
-## Other tools
-
-There is also a `rav_viewer` executable that can be used to visualize the raw data in a GUI.
-Other tools for other applications have been dropped, see the fork or other branches for those.
+- Detectors: active 3 (A,B,C). D is ignored.
+- Channel count: 384; edge channels (first/last of each 64-chan ASIC) are masked in viewers/plots.
+- `findRun.sh` centralizes run finding (pattern: `SCD_RUN<5d>_*.dat`).
