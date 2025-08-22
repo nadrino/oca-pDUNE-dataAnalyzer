@@ -183,16 +183,126 @@ do
       $convert_data
   fi
 
-  if [ -f "${outputDirectory}/${fileName}.cal" ]
-  then
-      echo "File ${outputDirectory}/${fileName}.cal already exists. Skipping calibration extraction."
-  else
-      extract_calibration="./calibration ${outputDirectory}/${fileName}.root --output ${outputDirectory}/${fileName} --dune --fast"
-      echo "Executing command: "$extract_calibration
-      $extract_calibration
+  # Determine calibration strategy: use previous CAL run's .cal
+  currentBaseName=$(basename "$filePath")
+  currentIsCAL=false
+  if echo "$currentBaseName" | grep -qi "CAL"; then
+    currentIsCAL=true
   fi
 
-  analyze_data="./dataAnalyzer -r ${outputDirectory}/${fileName}.root -c ${outputDirectory}/${fileName}.cal -o ${outputDirectory} -s ${nsigma} -n ${runit} -j ${settingsFile}"
+  # Search backwards for the most recent previous run whose filename contains "CAL"
+  calRunPath=""
+  prevRun=$((runit-1))
+  while [ $prevRun -ge 0 ]; do
+    prevPaths=$($SCRIPTS_DIR/findRun.sh -r "$prevRun" -i "$inputDirectory" 2>/dev/null | tail -n 1)
+    if [ -n "$prevPaths" ]; then
+      for p in $prevPaths; do
+        if basename "$p" | grep -qi "CAL"; then
+          calRunPath="$p"
+          break
+        fi
+      done
+    fi
+    if [ -n "$calRunPath" ]; then
+      break
+    fi
+    prevRun=$((prevRun-1))
+  done
+
+  calFileToUse=""
+  if [ -n "$calRunPath" ]; then
+    calBase=$(basename "$calRunPath")
+    calBase=${calBase%.*}
+    # Ensure previous CAL run converted and calibrated
+    if [ ! -f "${outputDirectory}/${calBase}.root" ]; then
+      echo "Converting previous CAL run for calibration: $calRunPath"
+      prev_convert_data="./PAPERO_convert ${calRunPath} ${outputDirectory}/${calBase}.root --dune"
+      echo "Executing command: $prev_convert_data"
+      $prev_convert_data
+    fi
+    if [ ! -f "${outputDirectory}/${calBase}.cal" ]; then
+      echo "Extracting calibration from previous CAL run: ${calBase}.root"
+      prev_extract_cal="./calibration ${outputDirectory}/${calBase}.root --output ${outputDirectory}/${calBase} --dune --fast"
+      echo "Executing command: $prev_extract_cal"
+      $prev_extract_cal
+    fi
+    calFileToUse="${outputDirectory}/${calBase}.cal"
+  else
+    echo "Warning: No previous CAL run found before run ${runit}."
+    # Fallback 1: search for the nearest later CAL run in the input directory
+    echo "Searching for the nearest later CAL run as fallback..."
+    calCandidates=$(find "$inputDirectory" -type f -name "SCD_RUN*.dat" 2>/dev/null | grep -i "CAL")
+    nextCalNum=""
+    nextCalPath=""
+    while IFS= read -r p; do
+      [ -z "$p" ] && continue
+      rn=$(basename "$p" | sed -n 's/.*SCD_RUN\([0-9]\{5\}\)_.*/\1/p')
+      if [ -n "$rn" ]; then
+        # force decimal to avoid octal
+        val=$((10#$rn))
+        if [ $val -gt $runit ]; then
+          if [ -z "$nextCalNum" ] || [ $val -lt $nextCalNum ]; then
+            nextCalNum=$val
+            nextCalPath="$p"
+          fi
+        fi
+      fi
+    done <<< "$calCandidates"
+
+    if [ -n "$nextCalPath" ]; then
+      echo "Using next CAL run as fallback: $nextCalPath"
+      calBase=$(basename "$nextCalPath")
+      calBase=${calBase%.*}
+      if [ ! -f "${outputDirectory}/${calBase}.root" ]; then
+        echo "Converting next CAL run for calibration: $nextCalPath"
+        next_convert_data="./PAPERO_convert ${nextCalPath} ${outputDirectory}/${calBase}.root --dune"
+        echo "Executing command: $next_convert_data"
+        $next_convert_data
+      fi
+      if [ ! -f "${outputDirectory}/${calBase}.cal" ]; then
+        echo "Extracting calibration from next CAL run: ${calBase}.root"
+        next_extract_cal="./calibration ${outputDirectory}/${calBase}.root --output ${outputDirectory}/${calBase} --dune --fast"
+        echo "Executing command: $next_extract_cal"
+        $next_extract_cal
+      fi
+      calFileToUse="${outputDirectory}/${calBase}.cal"
+    fi
+
+    # Fallback 2: if current run is CAL, ensure its calibration exists and use it
+    if [ "$currentIsCAL" = true ]; then
+      if [ ! -f "${outputDirectory}/${fileName}.cal" ]; then
+        extract_calibration="./calibration ${outputDirectory}/${fileName}.root --output ${outputDirectory}/${fileName} --dune --fast"
+        echo "Executing command: $extract_calibration"
+        $extract_calibration
+      fi
+      calFileToUse="${outputDirectory}/${fileName}.cal"
+    else
+      echo "Warning: Current run is not CAL and no previous CAL found; analysis will attempt with current .cal if present."
+      calFileToUse="${outputDirectory}/${fileName}.cal"
+    fi
+  fi
+
+  # Only extract calibration for the current run if it is a CAL run
+  if [ "$currentIsCAL" = true ]; then
+    if [ -f "${outputDirectory}/${fileName}.cal" ]; then
+      echo "Calibration for current CAL run already exists: ${outputDirectory}/${fileName}.cal"
+    else
+      extract_calibration="./calibration ${outputDirectory}/${fileName}.root --output ${outputDirectory}/${fileName} --dune --fast"
+      echo "Executing command: $extract_calibration"
+      $extract_calibration
+    fi
+  else
+    echo "Current run is not a CAL run; skipping calibration extraction for this run."
+  fi
+
+  # Verify calibration file exists
+  if [ -z "$calFileToUse" ] || [ ! -f "$calFileToUse" ]; then
+      echo "Error: Calibration file not found for run ${runit}. Expected: $calFileToUse"
+      echo "Skipping analysis for this run."
+      continue
+  fi
+
+  analyze_data="./dataAnalyzer -r ${outputDirectory}/${fileName}.root -c ${calFileToUse} -o ${outputDirectory} -s ${nsigma} -n ${runit} -j ${settingsFile}"
   
   if [ "$verbose" = true ]
   then

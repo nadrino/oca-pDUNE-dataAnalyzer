@@ -53,6 +53,12 @@ target_include_directories( event_display PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/in
 target_link_libraries( event_display ${OCA_LIBS} )
 install( TARGETS event_display DESTINATION bin )
 
+cmessage( STATUS "Creating hits_vs_sigma app..." )
+add_executable( hits_vs_sigma ${CMAKE_CURRENT_SOURCE_DIR}/src/hits_vs_sigma.cpp)
+target_include_directories( hits_vs_sigma PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc )
+target_link_libraries( hits_vs_sigma ${OCA_LIBS} )
+install( TARGETS hits_vs_sigma DESTINATION bin )
+
 cmessage( STATUS "Creating bmRawToRootConverter app..." )
 add_executable( bmRawToRootConverter ${CMAKE_CURRENT_SOURCE_DIR}/src/bmRawToRootConverter.cxx)
 target_include_directories( bmRawToRootConverter PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc )
