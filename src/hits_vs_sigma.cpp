@@ -183,47 +183,86 @@ int main(int argc, char* argv[]) {
   Long64_t nEntries = trees[0]->GetEntries();
   LogThrowIf(nEntries<=0, "No entries found in raw_events tree");
 
-  // Prepare sweep of sigma values
-  std::vector<double> xs; std::vector<double> ys; xs.reserve(256); ys.reserve(256);
-  for (double s = smin; s <= smax + 1e-9; s += sstep) {
-    xs.push_back(s);
-    ys.push_back(0.0);
-  }
+  // Prepare sweep of sigma values (x) and counters for clusters (y)
+  std::vector<double> xs; xs.reserve(256);
+  for (double s = smin; s <= smax + 1e-9; s += sstep) { xs.push_back(s); }
+  const size_t nThr = xs.size();
 
-  // Count hits per sigma threshold
+  // Per-detector and total cluster counts
+  std::vector<std::vector<double>> ys_det(kNDet, std::vector<double>(nThr, 0.0));
+  std::vector<double> ys_tot(nThr, 0.0);
+
+  // Count clusters per sigma threshold
+  // Definition: for a given detector and event, channels with sval>=threshold that are consecutive form one cluster
+  std::vector<float> sval_buf(kNChan, 0.0f);
   for (Long64_t ievt=0; ievt<nEntries; ++ievt) {
     for (int det=0; det<kNDet; ++det) { data[det]->clear(); trees[det]->GetEntry(ievt); }
     for (int det=0; det<kNDet; ++det) {
       const auto &vec = *data[det];
-      int n = std::min((int)vec.size(), kNChan);
+      const int n = std::min((int)vec.size(), kNChan);
+      // Precompute per-channel sigma significance (abs(amp-baseline)/sigma); 0 for invalid or masked
       for (int ch=0; ch<n; ++ch) {
-        if (mask[det][ch]) continue; // calib-bad or edge channel
+        if (mask[det][ch]) { sval_buf[ch] = 0.0f; continue; }
+        float sg = sigma[det][ch];
+        if (sg <= 0) { sval_buf[ch] = 0.0f; continue; }
         float amp = vec[ch] - baseline[det][ch];
-        float sg  = sigma[det][ch];
-        if (sg <= 0) continue;
-        double sval = std::abs(amp) / sg;
-        // For each sigma threshold bucket, if sval >= threshold, it counts as a hit
-        for (size_t i=0; i<xs.size(); ++i) {
-          if (sval >= xs[i]) ys[i] += 1.0; else break; // thresholds are increasing
+        sval_buf[ch] = std::fabs(amp) / sg;
+      }
+      for (int ch=n; ch<kNChan; ++ch) sval_buf[ch] = 0.0f;
+
+      // For each threshold, scan channels and count clusters by transitions false->true
+      for (size_t ith=0; ith<nThr; ++ith) {
+        const float thr = (float)xs[ith];
+        bool inCluster = false;
+        int clusters = 0;
+        for (int ch=0; ch<n; ++ch) {
+          const bool hit = (sval_buf[ch] >= thr);
+          if (hit && !inCluster) { inCluster = true; clusters++; }
+          else if (!hit && inCluster) { inCluster = false; }
         }
+        ys_det[det][ith] += clusters;
       }
     }
   }
 
-  // Plot
-  gStyle->SetOptStat(0);
-  TCanvas c("c_hvS", "Hits vs Sigma", 900, 700);
-  TGraph g(xs.size());
-  c.SetLogy();
-  for (size_t i=0; i<xs.size(); ++i) g.SetPoint(i, xs[i], ys[i]);
-  if (runNumForTitle >= 0) {
-    g.SetTitle(Form("Total hits vs Sigma (Run %d);Sigma threshold;Total hits", runNumForTitle));
-  } else {
-    g.SetTitle("Total hits vs Sigma;Sigma threshold;Total hits");
+  // Build total as sum of detectors
+  for (size_t ith=0; ith<nThr; ++ith) {
+    double sum = 0.0; for (int det=0; det<kNDet; ++det) sum += ys_det[det][ith];
+    ys_tot[ith] = sum;
   }
-  g.SetMarkerStyle(20); g.SetMarkerSize(1.0);
-  g.Draw("ALP");
-  c.SetGrid();
+
+  // Plot on a 2x2 canvas: Total (top-left), Det A (top-right), Det B (bottom-left), Det C (bottom-right)
+  gStyle->SetOptStat(0);
+  TCanvas c("c_cvS", "Clusters vs Sigma", 1100, 850);
+  c.Divide(2,2);
+
+  auto makeGraph = [&](const std::vector<double>& ys) {
+    TGraph *g = new TGraph((int)nThr);
+    for (size_t i=0; i<nThr; ++i) g->SetPoint((int)i, xs[i], ys[i]);
+    g->SetMarkerStyle(20); g->SetMarkerSize(0.9);
+    return g;
+  };
+
+  // Titles
+  auto setTitle = [&](TGraph* g, const char* prefix) {
+    if (runNumForTitle >= 0) g->SetTitle(Form("%s (Run %d);Sigma threshold;Total clusters", prefix, runNumForTitle));
+    else g->SetTitle(Form("%s;Sigma threshold;Total clusters", prefix));
+  };
+
+  // Total
+  c.cd(1); gPad->SetLogy(); gPad->SetGrid();
+  TGraph* gTot = makeGraph(ys_tot); setTitle(gTot, "Total clusters vs Sigma"); gTot->Draw("ALP");
+  // Detectors
+  const char* detNames[3] = {"Det 0", "Det 1", "Det 2"};
+  for (int det=0; det<kNDet; ++det) {
+    c.cd(det==0 ? 2 : (det==1 ? 3 : 4));
+    gPad->SetLogy(); gPad->SetGrid();
+    TGraph* gd = makeGraph(ys_det[det]);
+    char title[128]; snprintf(title, sizeof(title), "%s clusters vs Sigma", detNames[det]);
+    setTitle(gd, title);
+    gd->Draw("ALP");
+  }
+
   c.SaveAs(outPdf.c_str());
 
   LogInfo << "Saved plot to: " << outPdf << std::endl;
