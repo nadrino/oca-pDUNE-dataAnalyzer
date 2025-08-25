@@ -21,6 +21,7 @@
 #include "TStyle.h"
 #include "TSystem.h"
 #include <cmath>
+#include <algorithm>
 
 #include <nlohmann/json.hpp>
 
@@ -275,7 +276,8 @@ int main(int argc, char* argv[]) {
     std::vector <TH1F*> *h_amplitude = new std::vector <TH1F*>;
     h_amplitude->reserve(nDetectors);
     for (int i = 0; i < nDetectors; i++) {
-        TH1F *this_h_amplitude = new TH1F(Form("Amplitude (Detector %d)", i), Form("Amplitude (Detector %d)", i), 100, 0, 1000);
+    // Reduce amplitude range to 0–200 as requested
+    TH1F *this_h_amplitude = new TH1F(Form("Amplitude (Detector %d)", i), Form("Amplitude (Detector %d)", i), 100, 0, 200);
         this_h_amplitude->GetXaxis()->SetTitle("Amplitude");
         this_h_amplitude->GetYaxis()->SetTitle("Counts");
         h_amplitude->emplace_back(this_h_amplitude);
@@ -293,7 +295,8 @@ int main(int argc, char* argv[]) {
         h_amplitudeVsChannel->emplace_back(this_h_amplitudeVsChannel);
     }
 
-    TH1F *h_hitsInEvent = new TH1F("Hits in event", "Hits in event", 10, -0.5, 10);
+    // Extend hits-per-event range to cover up to 20 hits
+    TH1F *h_hitsInEvent = new TH1F("Hits in event", "Hits in event", 21, -0.5, 20.5);
     h_hitsInEvent->GetXaxis()->SetTitle("Hits");
     h_hitsInEvent->GetYaxis()->SetTitle("Counts");
 
@@ -336,13 +339,21 @@ int main(int argc, char* argv[]) {
     if (limit > maxEvents) limit = maxEvents;
 
     // Check if edge channels should be masked
-    bool maskEdgeChannels = false;
-    if (jsonSettings.contains("maskEdgeChannels")) {
-        maskEdgeChannels = jsonSettings["maskEdgeChannels"].get<bool>();
-        LogInfo << "Mask edge channels: " << (maskEdgeChannels ? "true" : "false") << std::endl;
-    } else {
-        LogInfo << "Using default maskEdgeChannels: false" << std::endl;
-    }
+    auto parseBool = [](const nlohmann::json& j, const std::string& key, bool defVal)->bool{
+        if (!j.contains(key)) return defVal;
+        const auto& v = j.at(key);
+        if (v.is_boolean()) return v.get<bool>();
+        if (v.is_string()) {
+            std::string s = v.get<std::string>();
+            std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+            return (s == "true" || s == "1" || s == "yes" || s == "y");
+        }
+        if (v.is_number_integer()) return v.get<int>() != 0;
+        return defVal;
+    };
+
+    bool maskEdgeChannels = parseBool(jsonSettings, "maskEdgeChannels", false);
+    LogInfo << "Mask edge channels: " << (maskEdgeChannels ? "true" : "false") << std::endl;
 
     // Function to check if a channel is an edge channel (chip boundaries)
     auto isEdgeChannel = [](int channel) -> bool {
@@ -364,13 +375,20 @@ int main(int argc, char* argv[]) {
     // Physical pitch: 10 cm across strip-normal over nChannels
     double channelPitch = 100.0 / nChannels; // mm per strip
     
-    // Histogram to accumulate reconstructed centers (in mm)
-    TH2F *h_recoCenter = new TH2F("h_recoCenter", "Interpolated centers;X [mm];Y [mm]", 100, -60.0, 60.0, 100, -60.0, 60.0);
-    TGraph *g_recoCenters = new TGraph();
-    g_recoCenters->SetName("g_recoCenters");
-    g_recoCenters->SetTitle("Interpolated centers;X [mm];Y [mm]");
-    g_recoCenters->SetMarkerStyle(20);
-    g_recoCenters->SetMarkerSize(0.5);
+    // Histograms to accumulate reconstructed centers (in mm)
+    // Further increase bin size (coarser bins): 120 mm range with 40 bins => 3 mm/bin
+    TH2F *h_recoCenter_3 = new TH2F("h_recoCenter_3", "Interpolated centers (exactly 3 clusters, 1 per detector);X [mm];Y [mm]", 40, -60.0, 60.0, 40, -60.0, 60.0);
+    TH2F *h_recoCenter_2to3 = new TH2F("h_recoCenter_2to3", "Interpolated centers (2 or 3 clusters);X [mm];Y [mm]", 40, -60.0, 60.0, 40, -60.0, 60.0);
+    TGraph *g_recoCenters_3 = new TGraph();
+    g_recoCenters_3->SetName("g_recoCenters_3");
+    g_recoCenters_3->SetTitle("Interpolated centers (exactly 3 clusters, 1 per detector);X [mm];Y [mm]");
+    g_recoCenters_3->SetMarkerStyle(20);
+    g_recoCenters_3->SetMarkerSize(0.5);
+    TGraph *g_recoCenters_2to3 = new TGraph();
+    g_recoCenters_2to3->SetName("g_recoCenters_2to3");
+    g_recoCenters_2to3->SetTitle("Interpolated centers (2 or 3 clusters);X [mm];Y [mm]");
+    g_recoCenters_2to3->SetMarkerStyle(20);
+    g_recoCenters_2to3->SetMarkerSize(0.5);
 
     for (int entryit = 0; entryit < limit; entryit++) {
 
@@ -403,28 +421,77 @@ int main(int argc, char* argv[]) {
 
         this_event->ExtractTriggeredHits();
 
-        if (verbose) this_event->PrintOverview();        
+    if (verbose) this_event->PrintOverview();        
         if (debug) this_event->PrintInfo(); // this should rather be debug
 
-        std::vector <std::pair<int, int>> triggeredHits = this_event->GetTriggeredHits();
-        if (triggeredHits.size() > 0){
-            int firstTrigChan[geomDetN];
-            for (int i=0;i<geomDetN;i++) firstTrigChan[i] = -1;
-            triggeredEvents++;
+        // Apply event-level filter for 2D centers: accept only events with exactly
+        // one cluster per detector (0,1,2). A cluster is one or more hits in contiguous
+        // channels within the same detector (edge-masked if enabled).
+    std::vector <std::pair<int, int>> triggeredHits = this_event->GetTriggeredHits();
+    int eventHitsMasked = 0;
+    if (!triggeredHits.empty()){
+            // Always fill per-hit histograms for all triggered (masked) hits
             for (auto &hit : triggeredHits) {
                 int det = hit.first;
                 int ch  = hit.second;
-                // Skip edge channels if masking is enabled
-                if (maskEdgeChannels && isEdgeChannel(ch)) {
-                    continue;
-                }
-                if (det < geomDetN && firstTrigChan[det] < 0) firstTrigChan[det] = ch;
-                hitsInEvent++;
+                if (det < 0 || det >= nDetectors) continue;
+                if (maskEdgeChannels && isEdgeChannel(ch)) continue;
+        eventHitsMasked++;
                 float amplitude = this_event->GetPeak(det, ch) - this_event->GetBaseline(det, ch);
                 h_firingChannels->at(det)->Fill(ch);
                 h_amplitude->at(det)->Fill(amplitude);
                 h_amplitudeVsChannel->at(det)->Fill(ch, amplitude);
             }
+
+            // Gather masked hits per detector
+            std::vector<int> detHits[4];
+            for (auto &hit : triggeredHits) {
+                int det = hit.first;
+                int ch  = hit.second;
+                if (det < 0 || det >= 4) continue;
+                if (maskEdgeChannels && isEdgeChannel(ch)) continue;
+                detHits[det].push_back(ch);
+            }
+
+            // Compute clusters per detector (contiguous runs)
+            auto countClusters = [](std::vector<int>& chans)->std::pair<int, std::pair<int,int>>{
+                if (chans.empty()) return {0, { -1, -1 }};
+                std::sort(chans.begin(), chans.end());
+                chans.erase(std::unique(chans.begin(), chans.end()), chans.end());
+                int clusters = 0;
+                int runStart = chans.front();
+                int prev = chans.front();
+                int cMin = runStart, cMax = prev; // track the only cluster's min/max when clusters==1
+                for (size_t i=1; i<chans.size(); ++i) {
+                    if (chans[i] != prev + 1) {
+                        clusters++;
+                        if (clusters == 1) { cMin = runStart; cMax = prev; }
+                        runStart = chans[i];
+                    }
+                    prev = chans[i];
+                }
+                // end last run
+                clusters++;
+                if (clusters == 1) { cMin = runStart; cMax = prev; }
+                return {clusters, {cMin, cMax}};
+            };
+
+            auto c0 = countClusters(detHits[0]);
+            auto c1 = countClusters(detHits[1]);
+            auto c2 = countClusters(detHits[2]);
+            // Accept events with exactly 2 or 3 clusters total, each on different detectors
+            bool perDetOk = (c0.first <= 1 && c1.first <= 1 && c2.first <= 1);
+            int totalClusters = (c0.first > 0) + (c1.first > 0) + (c2.first > 0);
+            bool acceptTwoOrThree = perDetOk && (totalClusters == 2 || totalClusters == 3);
+            bool acceptExactlyThree = (c0.first == 1 && c1.first == 1 && c2.first == 1);
+            if (acceptTwoOrThree) {
+                // Use cluster center channel per detector for (x,y) interpolation
+                int firstTrigChan[geomDetN];
+                firstTrigChan[0] = (c0.second.first >= 0 ? (c0.second.first + c0.second.second)/2 : -1);
+                firstTrigChan[1] = (c1.second.first >= 0 ? (c1.second.first + c1.second.second)/2 : -1);
+                firstTrigChan[2] = (c2.second.first >= 0 ? (c2.second.first + c2.second.second)/2 : -1);
+                triggeredEvents++;
+                hitsInEvent = (int)(detHits[0].size() + detHits[1].size() + detHits[2].size());
             // Reconstruct (x,y) from projections u_i = x cosθ_i + y sinθ_i, with u_i centered around detector origin.
             // Center channel indices so that strip centers map to u = 0 at detector center.
             double centerOffset = (nChannels * channelPitch) / 2.0; // 50 mm
@@ -461,12 +528,20 @@ int main(int argc, char* argv[]) {
                 }
             }
             if (haveXY) {
-                h_recoCenter->Fill(cx, cy);
-                g_recoCenters->SetPoint(g_recoCenters->GetN(), cx, cy);
+                // Fill 2-or-3 clusters map always
+                h_recoCenter_2to3->Fill(cx, cy);
+                g_recoCenters_2to3->SetPoint(g_recoCenters_2to3->GetN(), cx, cy);
+                // Additionally fill the exactly-3-clusters map when applicable
+                if (acceptExactlyThree) {
+                    h_recoCenter_3->Fill(cx, cy);
+                    g_recoCenters_3->SetPoint(g_recoCenters_3->GetN(), cx, cy);
+                }
             }
-        }
-
-        h_hitsInEvent->Fill(hitsInEvent);
+            }
+    }
+    // Fill hits-per-event with the number of masked triggered hits (not cluster-gated)
+    h_hitsInEvent->Fill(eventHitsMasked);
+    // Do not constrain other histograms; only centers are gated by the cluster criterion
 
         if (debug) this_event->PrintValidHits();      
         
@@ -551,19 +626,47 @@ int main(int argc, char* argv[]) {
 
     TCanvas *c_hitsInEvent = new TCanvas(Form("c_hitsInEvent_Run%s", runNumber.c_str()), Form("Hits in Event (Run %s)", runNumber.c_str()), 800, 600);
 
-    TCanvas *c_recoCenter = new TCanvas("c_recoCenter", "Interpolated Centers", 700, 500);
-    c_recoCenter->cd();
-    h_recoCenter->Draw("COLZ");
-    g_recoCenters->SetMarkerColor(kBlack);
-    g_recoCenters->Draw("P SAME");
-    c_recoCenter->Update();
+    TCanvas *c_recoCenter_3 = new TCanvas("c_recoCenter_3", "Interpolated Centers (exactly 3)", 700, 500);
+    c_recoCenter_3->cd();
+    h_recoCenter_3->Draw("COLZ");
+    g_recoCenters_3->SetMarkerColor(kBlack);
+    g_recoCenters_3->Draw("P SAME");
+    c_recoCenter_3->Update();
+
+    TCanvas *c_recoCenter_2to3 = new TCanvas("c_recoCenter_2to3", "Interpolated Centers (2 or 3)", 700, 500);
+    c_recoCenter_2to3->cd();
+    h_recoCenter_2to3->Draw("COLZ");
+    g_recoCenters_2to3->SetMarkerColor(kBlack);
+    g_recoCenters_2to3->Draw("P SAME");
+    c_recoCenter_2to3->Update();
 
     LogInfo << "Drawing histograms" << std::endl;
     for (int i = 0; i < nDetectors; i++) {
         c_channelsFiring->cd(i+1);
-        h_firingChannels->at(i)->Draw();
+    // Use log scale for counts and ensure a positive minimum
+    gPad->SetLogy();
+    h_firingChannels->at(i)->SetMinimum(0.5);
+    h_firingChannels->at(i)->Draw();
     }
     c_channelsFiring->Update();
+
+    // Print top-N spike channels per detector for quick inspection
+    const int topN = 10;
+    LogInfo << "Top firing channels per detector (channel:count)" << std::endl;
+    for (int i = 0; i < nDetectors; i++) {
+        std::vector<std::pair<int,double>> counts; counts.reserve(nChannels);
+        for (int b = 1; b <= nChannels; ++b) {
+            double c = h_firingChannels->at(i)->GetBinContent(b);
+            if (c > 0) counts.emplace_back(b-1, c); // channel index = bin-1
+        }
+        std::sort(counts.begin(), counts.end(), [](const auto& a, const auto& b){return a.second > b.second;});
+        LogInfo << "  Detector " << i << ": ";
+        int limitN = std::min(topN, (int)counts.size());
+        for (int k = 0; k < limitN; ++k) {
+            LogInfo << counts[k].first << ":" << (long long)counts[k].second << (k==limitN-1?"":"  ");
+        }
+        LogInfo << std::endl;
+    }
 
     for (int i = 0; i < nDetectors; i++) {
         c_sigma->cd(i+1);
@@ -649,13 +752,18 @@ int main(int argc, char* argv[]) {
         c_amplitude->Update();
         c_amplitude->SaveAs(output_filename_report.c_str());
         
-        // Page 5: Reconstructed centers heatmap
-        if (c_recoCenter) {
-            c_recoCenter->Update();
-            c_recoCenter->SaveAs(output_filename_report.c_str());
+        // Page 5: Reconstructed centers heatmap (exactly 3)
+        if (c_recoCenter_3) {
+            c_recoCenter_3->Update();
+            c_recoCenter_3->SaveAs(output_filename_report.c_str());
+        }
+        // Page 6: Reconstructed centers heatmap (2 or 3)
+        if (c_recoCenter_2to3) {
+            c_recoCenter_2to3->Update();
+            c_recoCenter_2to3->SaveAs(output_filename_report.c_str());
         }
         
-        // Page 6: Hits in event plot (final page)
+        // Page 7: Hits in event plot (final page)
         c_hitsInEvent->Update();
         c_hitsInEvent->SaveAs((output_filename_report + ")").c_str());
         
@@ -669,13 +777,8 @@ int main(int argc, char* argv[]) {
     }
 
     // Check if showPlots is enabled in JSON settings
-    bool showPlots = false;
-    if (jsonSettings.contains("showPlots")) {
-        showPlots = jsonSettings["showPlots"].get<bool>();
-        LogInfo << "Show plots: " << (showPlots ? "true" : "false") << std::endl;
-    } else {
-        LogInfo << "Using default showPlots: false" << std::endl;
-    }
+    bool showPlots = parseBool(jsonSettings, "showPlots", false);
+    LogInfo << "Show plots: " << (showPlots ? "true" : "false") << std::endl;
 
     if (showPlots) {
         LogInfo << "Running root viewer..." << std::endl;
