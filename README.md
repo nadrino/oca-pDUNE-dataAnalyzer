@@ -1,53 +1,77 @@
 # pDUNE Oca Data Analyzer
 
-Software to analyze the data coming from the beam NP02 beam plug tracker.
-The DAQ is [here](https://github.com/emanuele-villa/oca-pDUNE-DAQ/tree/master).
-This code has been forked from the one originally written by INFN Perugia.
+Tools to convert, calibrate, analyze, and visualize NP02 beam plug tracker data.
+DAQ repo: https://github.com/emanuele-villa/oca-pDUNE-DAQ
 
-## Dependencies
+Data location: `/eos/user/e/evilla/dune/np02-beam-monitor`. Request access via emanuele.villa@cern.ch. Ask Emanuele for the web interface URL if preferred.
 
-To use the code in your local machine, you need to have:
+## Install
 
-- ROOT installed in the standard location, meaning `/usr/local/`,
-- json header: `json.hpp`;
-- cmake (minimum 3.17);
-- gcc version at least 11, or a recent clang;
+After cloning, initialize submodules and compile:
 
-If needed, install or update these packages.
-
-## Usage
-
-Scripts handle all the steps of compilation, data conversion and analysis.
-The scripts are located in the `scripts` folder.
-Input and output folders are set in a json file, `config.json`, that can be found in 
-
-
-The script `analyzeRuns.sh` is the main script to analyze the data.
-It comes with a --help option to show the available options.
-Example of usage:
-    
 ```bash
-./analyzeRuns.sh -s json/mysettings.json -r SCD_RUN00021_CAL_20240826_160235.dat 
+git clone https://github.com/emanuele-villa/oca-pDUNE-dataAnalyzer.git
+cd oca-pDUNE-dataAnalyzer
+./scripts/manage-submodules.sh --up
+source scripts/compile.sh
 ```
 
-Or you can use the run numbers (**not available yet, need to change the daq**):
-        
+Requirements:
+- ROOT installed at `/usr/local/`
+- `json.hpp` header available
+- CMake >= 3.17, GCC >= 11 (or recent clang)
+
+## Scripts overview
+
+Settings are read from a JSON (e.g., `json/ev-settings.json`) with `inputDirectory` and `outputDirectory`.
+
+On lxplus (recommended), all dependencies are available when sourcing the environment via `scripts/init.sh`, which is invoked by the other scripts; you usually don't need to run it manually.
+
+- analyzeRun.sh
+	- Batch convert, calibrate (if needed), and analyze run(s).
+	- Calibration policy: use the most recent previous CAL run’s `.cal`; if none, use the nearest later CAL; if the current run is CAL, use its own `.cal`.
+
+- bmRawToRootConverter.sh
+	- Convert `.dat` to ROOT only.
+
+- evtDisplay.sh
+	- Build and launch the interactive ROOT event display.
+
+- hitsVsSigma.sh
+	- Generate a Hits vs Sigma plot for a run. Similar flags to `analyzeRun.sh`.
+
+## Apps
+
+- PAPERO_convert: raw `.dat` → ROOT
+- calibration: produce channel baseline/sigma/mask `.cal`
+- dataAnalyzer: main analysis producing per-run PDF and ROOT outputs
+- event_display: GUI to browse events; Prev/Next, larger UI; 3 detectors (A,B,C)
+- hits_vs_sigma: counts total hits across events for a sweep of sigma thresholds, with calibration-bad and edge channel masking; saves a PDF
+
+## Usage examples
+
+Analyze a single run by number:
 ```bash
-./analyzeRuns.sh -f 10 -l 12
+./scripts/analyzeRun.sh -f 275 -j json/ev-settings.json
 ```
 
-This will analyze the run `SCD_RUN00021_CAL_20240826_160235.dat` and produce the output in the `output` folder that has been set in the json file.
+Convert a run by number:
+```bash
+./scripts/bmRawToRootConverter.sh -j json/ev-settings.json -r 275
+```
 
-## Structure
+Open event display on a run (auto-build; sigma via CLI):
+```bash
+./scripts/evtDisplay.sh -j json/ev-settings.json -r 275 -s 7
+```
 
-The actual steps that are performed by the scripts are:
+Hits vs Sigma (sweep 1..15):
+```bash
+./scripts/hitsVsSigma.sh -r 275 -j json/ev-settings.json --smin 1 --smax 15 --sstep 1
+```
 
-- compile the code, stopping execution if the compilation fails;
-- convert the raw data into root files using the `PAPERO_convert` executable;
-- create the calibration file, that extracts the pedestal by channel, using the `calibration` executable;
-- read calib and root files and do some analysis, using the `dataAnalyzer   ` executable;
+## Notes
 
-## Other tools
-
-There is also a `rav_viewer` executable that can be used to visualize the raw data in a GUI.
-Other tools for other applications have been dropped, see the fork or other branches for those.
+- Detectors: active 3 (A,B,C). D is ignored.
+- Channel count: 384; edge channels (first/last of each 64-chan ASIC) are masked in viewers/plots.
+- `findRun.sh` centralizes run finding (pattern: `SCD_RUN<5d>_*.dat`).

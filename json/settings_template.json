@@ -1,8 +1,13 @@
 {
-    "inputDirectory": "/Users/nadrino/Documents/Work/Repositories/oca-pDUNE-dataAnalyzer/input",
-    "outputDirectory": "/Users/nadrino/Documents/Work/Repositories/oca-pDUNE-dataAnalyzer/output",
-    "nSigma":"20",
-    "showPlots":"true",
-    "verboseMode": "false",
-    "debugMode":"false"
+    "inputDirectory": "/eos/user/e/evilla/dune/np02-beam-monitor/",
+    "outputDirectory": "../output/",
+
+    "maxEvents":100000000,
+    "nSigma":5,
+    "maskEdgeChannels":true,
+
+    "showPlots":true,
+    "verboseMode": false,
+    "debugMode":false
 }
+
