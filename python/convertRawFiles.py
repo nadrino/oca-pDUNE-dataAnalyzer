@@ -64,7 +64,7 @@ def main():
         subprocess.run([
             'bmRawToRootConverter',
             '-i', str(file_path),
-            '-c', str(selected_cal_file).replace(".dat", ".root"),
+            '-c', os.path.join(output_folder, str(selected_cal_file.name).replace(".dat", ".root")),
             '-o', output_folder,
             '-t', str(3)
         ])
