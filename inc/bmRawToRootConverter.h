@@ -26,6 +26,7 @@ struct BeamMonitorEventBuffer {
 
   uint32_t peakAdc[N_DETECTORS][N_CHANNELS]{};
   uint32_t peakAdcSum[N_DETECTORS]{};
+  uint32_t nClusters[N_DETECTORS];
   double peak[N_DETECTORS][N_CHANNELS]{};
   double peakSum[N_DETECTORS]{};
   double peakZeroSuppr[N_DETECTORS][N_CHANNELS]{};

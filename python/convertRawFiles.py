@@ -25,7 +25,7 @@ def main():
         return
 
     cal_files = sorted([f for f in dat_files if "_CAL_" in f.name], key=lambda x: x.name)
-    beam_files = [f for f in dat_files if "_BEAM_" in f.name]
+    beam_files = sorted([f for f in dat_files if "_BEAM_" in f.name], key=lambda x: x.name)
 
     print(f"Found {len(dat_files)} .dat files in '{input_folder}':")
     print(f"Processing CAL files ({len(cal_files)}):")
@@ -43,9 +43,30 @@ def main():
             '-o', output_folder
         ])
 
-    # print(f"Processing BEAM files ({len(beam_files)}):")
-    # for file_path in beam_files:
-    #     print(f"- {file_path.name}")
+
+    def getRunNumber(filePath_):
+        # SCD_RUN00283_CAL_20250812_083520
+        return int(filePath_.name[7:12])
+
+    print(f"Processing BEAM files ({len(beam_files)}):")
+    for file_path in beam_files:
+        print(f"- {file_path.name}")
+
+        beamRunNum = getRunNumber(file_path)
+        selected_cal_file = None
+        minRunOffset = -1
+        for cal_file in cal_files:
+            if minRunOffset == -1 or abs(beamRunNum - getRunNumber(cal_file)) < minRunOffset:
+                selected_cal_file = cal_file
+
+        print(f"  - Using CAL: {selected_cal_file.name}")
+        subprocess.run([
+            'bmRawToRootConverter',
+            '-i', str(file_path),
+            '-c', str(selected_cal_file),
+            '-o', output_folder,
+            '-t', 3
+        ])
 
 
 

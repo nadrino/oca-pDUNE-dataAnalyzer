@@ -181,6 +181,7 @@ int main(int argc, char **argv){
       if( zeroSuppress ) {
         tree->Branch("peakZeroSuppr", &bmEvent.peakZeroSuppr, Form("peakZeroSuppr[%d][%d]/D", N_DETECTORS, N_CHANNELS));
         tree->Branch("peakZeroSupprSum", &bmEvent.peakZeroSupprSum, Form("peakZeroSupprSum[%d]/D", N_DETECTORS));
+        tree->Branch("nClusters", &bmEvent.nClusters, Form("nClusters[%d]/i", N_DETECTORS));
         tree->Branch("xBarycenter", &bmEvent.xBarycenter, Form("xBarycenter[%d]/D", N_DETECTORS));
         tree->Branch("yBarycenter", &bmEvent.yBarycenter, Form("yBarycenter/D"));
       }
@@ -254,6 +255,18 @@ int main(int argc, char **argv){
               0.0
             );
         if( zeroSuppress ) {
+          bmEvent.nClusters[iDet] = 0;
+
+          bool isLastChOn = false;
+          for( int iCh = 0; iCh < N_CHANNELS; ++iCh ) {
+            if( bmEvent.peakZeroSuppr[iDet][iCh] > 0. ) {
+              // count once
+              if( not isLastChOn ) { bmEvent.nClusters[iDet]++; }
+              isLastChOn = true;
+            }
+            else{ isLastChOn = false; }
+          }
+
           bmEvent.peakZeroSupprSum[iDet] = std::accumulate(
               &bmEvent.peakZeroSuppr[iDet][0],
               &bmEvent.peakZeroSuppr[iDet][N_CHANNELS],
