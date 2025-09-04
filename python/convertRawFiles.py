@@ -24,7 +24,7 @@ def main():
         print(f"No .dat files found in '{input_folder}'")
         return
 
-    cal_files = [f for f in dat_files if "_CAL_" in f.name]
+    cal_files = sorted([f for f in dat_files if "_CAL_" in f.name], key=lambda x: x.name)
     beam_files = [f for f in dat_files if "_BEAM_" in f.name]
 
     print(f"Found {len(dat_files)} .dat files in '{input_folder}':")
