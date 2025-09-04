@@ -32,7 +32,8 @@ def main():
     for file_path in cal_files:
         print(f"- {file_path.name}")
 
-        if not os.path.exists(os.path.join(output_folder, file_path.name.replace('.dat', '.root'))):
+        if os.path.exists(os.path.join(output_folder, file_path.name.replace('.dat', '.root'))):
+            print("skipping")
             continue
 
         subprocess.run([
