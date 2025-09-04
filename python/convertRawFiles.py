@@ -60,13 +60,13 @@ def main():
                 selected_cal_file = cal_file
 
         print(f"  - Using CAL: {selected_cal_file.name}")
-        subprocess.run([
-            'bmRawToRootConverter',
-            '-i', str(file_path),
-            '-c', str(selected_cal_file),
-            '-o', output_folder,
-            '-t', 3
-        ])
+        # subprocess.run([
+        #     'bmRawToRootConverter',
+        #     '-i', str(file_path),
+        #     '-c', str(selected_cal_file).replace(".dat", ".root"),
+        #     '-o', output_folder,
+        #     '-t', 3
+        # ])
 
 
 
