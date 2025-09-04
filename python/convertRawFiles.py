@@ -11,7 +11,7 @@ def main():
     parser.add_argument("-o", type=str, required=True, help="Output folder path")
 
     args = parser.parse_args()
-    input_folder = Path(args.input)
+    input_folder = Path(args.i)
     output_folder = Path(args.o)
 
     if not input_folder.exists():
