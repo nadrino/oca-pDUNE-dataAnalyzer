@@ -57,6 +57,7 @@ def main():
         minRunOffset = -1
         for cal_file in cal_files:
             if minRunOffset == -1 or abs(beamRunNum - getRunNumber(cal_file)) < minRunOffset:
+                minRunOffset = abs(beamRunNum - getRunNumber(cal_file))
                 selected_cal_file = cal_file
 
         print(f"  - Using CAL: {selected_cal_file.name}")
