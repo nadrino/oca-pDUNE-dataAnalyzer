@@ -3,16 +3,23 @@ import argparse
 from pathlib import Path
 import subprocess
 
+# python \
+#   /nfs/sw/beam-plug-monitor/repo/oca-pDUNE-dataAnalyzer/python/convertRawFiles.py
+#   -i /data3/np02-beam-monitor-data
+#   -o /nfs/sw/beam-plug-monitor/data
+#   -of
 
 def main():
     parser = argparse.ArgumentParser(description='Convert .dat files in specified folder')
     parser.add_argument('-i', type=str, required=True,
                         help='Input folder path containing .dat files')
     parser.add_argument("-o", type=str, required=True, help="Output folder path")
+    parser.add_argument("-ob", action="store_true", help="Overwrite BEAM files")
 
     args = parser.parse_args()
     input_folder = Path(args.i)
     output_folder = Path(args.o)
+    overwrite_beam_files = bool(args.ob)
 
     if not input_folder.exists():
         print(f"Error: Input folder '{input_folder}' does not exist.")
@@ -52,6 +59,10 @@ def main():
     for file_path in beam_files:
         print(f"- {file_path.name}")
 
+        if not overwrite_beam_files and os.path.exists(os.path.join(output_folder, file_path.name.replace('.dat', '.root'))):
+            print("skipping")
+            continue
+
         beamRunNum = getRunNumber(file_path)
         selected_cal_file = None
         minRunOffset = -1
@@ -66,7 +77,8 @@ def main():
             '-i', str(file_path),
             '-c', os.path.join(output_folder, str(selected_cal_file.name).replace(".dat", ".root")),
             '-o', output_folder,
-            '-t', str(3)
+            '-t', str(3),
+            '-if' # if beam .txt output
         ])
         
         
