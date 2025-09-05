@@ -7,19 +7,19 @@ import subprocess
 #   /nfs/sw/beam-plug-monitor/repo/oca-pDUNE-dataAnalyzer/python/convertRawFiles.py
 #   -i /data3/np02-beam-monitor-data
 #   -o /nfs/sw/beam-plug-monitor/data
-#   -of
+#   --override
 
 def main():
     parser = argparse.ArgumentParser(description='Convert .dat files in specified folder')
     parser.add_argument('-i', type=str, required=True,
                         help='Input folder path containing .dat files')
     parser.add_argument("-o", type=str, required=True, help="Output folder path")
-    parser.add_argument("-ob", action="store_true", help="Overwrite BEAM files")
+    parser.add_argument("--override", action="store_true", help="Overwrite BEAM files")
 
     args = parser.parse_args()
     input_folder = Path(args.i)
     output_folder = Path(args.o)
-    overwrite_beam_files = bool(args.ob)
+    overwrite_beam_files = bool(args.override)
 
     if not input_folder.exists():
         print(f"Error: Input folder '{input_folder}' does not exist.")
