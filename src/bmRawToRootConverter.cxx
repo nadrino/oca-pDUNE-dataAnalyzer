@@ -91,7 +91,6 @@ int main(int argc, char **argv){
 
   std::string outFolderPath{};
   if( parser.isOptionTriggered("outputFolder") ){ outFolderPath = parser.getOptionVal<std::string>("outputFolder"); }
-  DEBUG_VAR(outFolderPath);
 
   std::filesystem::path outputRootFilePath(inputDatFilePath);
   outputRootFilePath.replace_extension(".root");
@@ -175,7 +174,7 @@ int main(int argc, char **argv){
   }
 
   // SCD_RUN00528_BEAM_20250904_065657.dat
-  std::string dateTimeStr = std::filesystem::path(inputDatFilePath).filename().string();
+  std::string dateTimeStr = std::filesystem::path(inputDatFilePath).filename().string().substr(18, 15);
   std::tm tmbuff = {};
   std::stringstream ss(dateTimeStr);
   ss >> std::get_time(&tmbuff, "%Y%m%d_%H%M%S");
