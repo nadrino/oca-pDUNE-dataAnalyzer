@@ -91,6 +91,7 @@ int main(int argc, char **argv){
 
   std::string outFolderPath{};
   if( parser.isOptionTriggered("outputFolder") ){ outFolderPath = parser.getOptionVal<std::string>("outputFolder"); }
+  DEBUG_VAR(outFolderPath);
 
   std::filesystem::path outputRootFilePath(inputDatFilePath);
   outputRootFilePath.replace_extension(".root");
