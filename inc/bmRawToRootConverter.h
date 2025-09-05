@@ -22,6 +22,7 @@ struct BeamMonitorEventBuffer {
   unsigned long timestamp{0}; // internal 20ns
   unsigned long timestampNs{0};
   unsigned long timestampUtcNs{0};
+  unsigned long timestampUtcMs{0}; // for IF BEAM
   unsigned long extTimestamp{0};
   unsigned long triggerId{0};
   uint64_t offset{0};

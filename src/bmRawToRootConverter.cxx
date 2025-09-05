@@ -335,14 +335,16 @@ int main(int argc, char **argv){
     }
 
     if( ifBeamOutput.is_open() and not (useCalibThreshold and skip) ) {
-      ifBeamOutput << "z,pdune " << bmEvent.timestampUtcNs << " " << 0 << std::endl;
+      bmEvent.timestampUtcMs = bmEvent.timestampUtcNs * static_cast<size_t>(1E6);
+      ifBeamOutput << "z,pdune " << bmEvent.timestampUtcMs << " " << 0 << std::endl;
       // <device_name>\t<timestamp_in_ms>\t<optional_unit_name>\t<scalar_value|string|null>\t<array_value|null>
-      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/timestampNs\t" << bmEvent.timestampUtcNs << "\tnull\t" << bmEvent.timestampNs << "\tnull" << std::endl;
-      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/extTimestamp\t" << bmEvent.timestampUtcNs << "\tnull\t" << bmEvent.extTimestamp << "\tnull" << std::endl;
-      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/triggerNumber\t" << bmEvent.timestampUtcNs << "\tnull\t" << bmEvent.triggerNumber << "\tnull" << std::endl;
-      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/nClusters[]\t" << bmEvent.timestampUtcNs << "\tnull\tnull\t{" << bmEvent.nClusters[0] << "," << bmEvent.nClusters[1] << "," << bmEvent.nClusters[2] << "}" << std::endl;
-      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/xBarycenter[]\t" << bmEvent.timestampUtcNs << "\tnull\tnull\t{" << bmEvent.xBarycenter[0] << "," << bmEvent.xBarycenter[1] << "," << bmEvent.xBarycenter[2] << "}" << std::endl;
-      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/yBarycenter\t" << bmEvent.timestampUtcNs << "\tnull\t" << bmEvent.yBarycenter << "\tnull" << std::endl;
+      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/timestampNs\t" << bmEvent.timestampUtcMs << "\tnull\t" << bmEvent.timestampNs << "\tnull" << std::endl;
+      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/timestampUtcNs\t" << bmEvent.timestampUtcMs << "\tnull\t" << bmEvent.timestampUtcNs << "\tnull" << std::endl;
+      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/extTimestamp\t" << bmEvent.timestampUtcMs << "\tnull\t" << bmEvent.extTimestamp << "\tnull" << std::endl;
+      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/triggerNumber\t" << bmEvent.timestampUtcMs << "\tnull\t" << bmEvent.triggerNumber << "\tnull" << std::endl;
+      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/nClusters[]\t" << bmEvent.timestampUtcMs << "\tnull\tnull\t{" << bmEvent.nClusters[0] << "," << bmEvent.nClusters[1] << "," << bmEvent.nClusters[2] << "}" << std::endl;
+      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/xBarycenter[]\t" << bmEvent.timestampUtcMs << "\tnull\tnull\t{" << bmEvent.xBarycenter[0] << "," << bmEvent.xBarycenter[1] << "," << bmEvent.xBarycenter[2] << "}" << std::endl;
+      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/yBarycenter\t" << bmEvent.timestampUtcMs << "\tnull\t" << bmEvent.yBarycenter << "\tnull" << std::endl;
     }
 
     if( not skipEventTree ){ tree->Fill(); nWriten++; }
