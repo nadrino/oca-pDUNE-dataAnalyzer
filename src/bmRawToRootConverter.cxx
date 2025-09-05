@@ -174,7 +174,8 @@ int main(int argc, char **argv){
   }
 
   // SCD_RUN00528_BEAM_20250904_065657.dat
-  std::string dateTimeStr = std::filesystem::path(inputDatFilePath).filename().string().substr(18, 15);
+  std::string dateTimeStr = GenericToolbox::splitString(inputDatFilePath, "/").back().substr(18, 15);
+  DEBUG_VAR(dateTimeStr);
   std::tm tmbuff = {};
   std::stringstream ss(dateTimeStr);
   ss >> std::get_time(&tmbuff, "%Y%m%d_%H%M%S");
