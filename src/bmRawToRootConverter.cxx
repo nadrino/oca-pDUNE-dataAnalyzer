@@ -174,10 +174,10 @@ int main(int argc, char **argv){
   }
 
   // SCD_RUN00528_BEAM_20250904_065657.dat
-  std::string dateTimeStr = GenericToolbox::splitString(inputDatFilePath, "/").back().substr(17, 15);
-  DEBUG_VAR(inputDatFilePath);
-  DEBUG_VAR(GenericToolbox::splitString(inputDatFilePath, "/").back());
-  DEBUG_VAR(dateTimeStr);
+  auto fName{GenericToolbox::splitString(inputDatFilePath, "/").back()};
+  auto fNameSplit = GenericToolbox::splitString(GenericToolbox::splitString(fName, ".")[0], "_");
+  std::string dateTimeStr = fNameSplit[fNameSplit.size()-2] + "_" + fNameSplit[fNameSplit.size()-1];
+  // std::string dateTimeStr = GenericToolbox::splitString(inputDatFilePath, "/").back().substr(18, 15);
   std::tm tmbuff = {};
   std::stringstream ss(dateTimeStr);
   ss >> std::get_time(&tmbuff, "%Y%m%d_%H%M%S");
