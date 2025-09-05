@@ -335,7 +335,7 @@ int main(int argc, char **argv){
     }
 
     if( ifBeamOutput.is_open() and not (useCalibThreshold and skip) ) {
-      bmEvent.timestampUtcMs = bmEvent.timestampUtcNs * static_cast<size_t>(1E6);
+      bmEvent.timestampUtcMs = bmEvent.timestampUtcNs / static_cast<size_t>(1E6);
       ifBeamOutput << "z,pdune " << bmEvent.timestampUtcMs << " " << 0 << std::endl;
       // <device_name>\t<timestamp_in_ms>\t<optional_unit_name>\t<scalar_value|string|null>\t<array_value|null>
       ifBeamOutput << "dip/acc/NORTH/NP02/BPM/timestampNs\t" << bmEvent.timestampUtcMs << "\tnull\t" << bmEvent.timestampNs << "\tnull" << std::endl;
