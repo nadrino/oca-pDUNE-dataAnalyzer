@@ -19,10 +19,16 @@ struct BeamMonitorEventBuffer {
   unsigned long fwVersion{0};
   unsigned long triggerNumber{0};
   unsigned long boardId{0};
-  unsigned long timestamp{0};
+  unsigned long timestamp{0}; // internal 20ns
+  unsigned long timestampNs{0};
+  unsigned long timestampUtcNs{0};
   unsigned long extTimestamp{0};
   unsigned long triggerId{0};
   uint64_t offset{0};
+  unsigned long lastTriggeredTimestampNs{0};
+  unsigned long lastTimestampNs{0};
+  long deltaTimeNsLastTrigEvent{0};
+  long deltaTimeNsLastEvent{0};
 
   uint32_t peakAdc[N_DETECTORS][N_CHANNELS]{};
   uint32_t peakAdcSum[N_DETECTORS]{};

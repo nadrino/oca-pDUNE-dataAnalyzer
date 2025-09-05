@@ -55,6 +55,7 @@ int main(int argc, char **argv){
   parser.addTriggerOption("skipEventTree", {"--skip-event"}, "Don't write the events TTree (useful if calib)");
   parser.addTriggerOption("enableIfBeamOutput", {"-if"}, "Also generate .txt files for filling up the IFBeam database");
   parser.addTriggerOption("verbose", {"-v"}, "Enable verbode");
+  parser.addTriggerOption("enableZeroSuppr", {"-z"}, "Enable zero suppression");
 
   LogInfo << parser.getDescription().str() << std::endl;
   LogInfo << "Usage: " << std::endl;
@@ -77,10 +78,11 @@ int main(int argc, char **argv){
   bool verbose = parser.isOptionTriggered("verbose");
   bool skipEventTree = parser.isOptionTriggered("skipEventTree");
   bool writeCalibData = parser.isOptionTriggered("writeCalibData");
-  bool zeroSuppress = parser.isOptionTriggered("threshold");
+  bool useCalibThreshold = parser.isOptionTriggered("threshold");
   bool calcCovCalib = parser.isOptionTriggered("calcCovCalib");
+  bool enableZeroSuppr = parser.isOptionTriggered("enableZeroSuppr");
   double threshold{std::nan("unset")};
-  if(zeroSuppress) threshold = parser.getOptionVal<double>("threshold");
+  if(useCalibThreshold) threshold = parser.getOptionVal<double>("threshold");
 
   LogExitIf(
     writeCalibData and not calibFilePath.empty(),
@@ -162,22 +164,23 @@ int main(int argc, char **argv){
 
 
   std::ofstream ifBeamOutput;
+  size_t fileTimestamp;
   if( parser.isOptionTriggered("enableIfBeamOutput") ) {
     std::filesystem::path ifBeamOutputPath(outputRootFilePath);
     ifBeamOutputPath.replace_extension(".txt");
     LogInfo << "Opening output IFBeam output txt file: " << ifBeamOutputPath << std::endl;
     ifBeamOutput = std::ofstream(ifBeamOutputPath);
     LogThrowIf(ifBeamOutput.fail(), "Could not open IFBeam output file: " << ifBeamOutputPath);
-
-// SCD_RUN00528_BEAM_20250904_065657.dat
-    std::string dateTimeStr = std::filesystem::path(inputDatFilePath).stem().string().substr(19, 15);
-    std::tm tmbuff = {};
-    std::stringstream ss(dateTimeStr);
-    ss >> std::get_time(&tmbuff, "%Y%m%d_%H%M%S");
-    std::time_t timestamp = std::mktime(&tmbuff);
-    size_t fileTimestamp = static_cast<size_t>(timestamp) * 1000; // Convert to milliseconds
   }
 
+  // SCD_RUN00528_BEAM_20250904_065657.dat
+  std::string dateTimeStr = std::filesystem::path(inputDatFilePath).stem().string().substr(18, 15);
+  std::tm tmbuff = {};
+  std::stringstream ss(dateTimeStr);
+  ss >> std::get_time(&tmbuff, "%Y%m%d_%H%M%S");
+  std::time_t timestamp = std::mktime(&tmbuff);
+  fileTimestamp = static_cast<size_t>(timestamp) * 1E9; // Convert to ns
+  DEBUG_VAR(fileTimestamp);
 
   outputRootFile->cd();
   TTree* tree{nullptr};
@@ -190,17 +193,21 @@ int main(int argc, char **argv){
     tree->Branch("triggerNumber", &bmEvent.triggerNumber);
     // tree->Branch("boardId", &bmEvent.boardId); // always board 0
     tree->Branch("timestamp", &bmEvent.timestamp);
+    tree->Branch("timestampNs", &bmEvent.timestampNs);
+    tree->Branch("timestampUtcNs", &bmEvent.timestampUtcNs);
     tree->Branch("extTimestamp", &bmEvent.extTimestamp);
     tree->Branch("triggerId", &bmEvent.triggerId);
     tree->Branch("peakAdc", &bmEvent.peakAdc, Form("peakAdc[%d][%d]/i", N_DETECTORS, N_CHANNELS));
+    tree->Branch("deltaTimeNsLastEvent", &bmEvent.deltaTimeNsLastEvent);
     // tree->Branch("peakAdcSum", &bmEvent.peakAdcSum, Form("peakAdcSum[%d]/i", N_DETECTORS));
 
     if( not calibFilePath.empty() ){
       tree->Branch("peak", &bmEvent.peak, Form("peak[%d][%d]/D", N_DETECTORS, N_CHANNELS));
       tree->Branch("peakSum", &bmEvent.peakSum, Form("peakSum[%d]/D", N_DETECTORS));
-      if( zeroSuppress ) {
+      if( useCalibThreshold ) {
         tree->Branch("peakZeroSuppr", &bmEvent.peakZeroSuppr, Form("peakZeroSuppr[%d][%d]/D", N_DETECTORS, N_CHANNELS));
         tree->Branch("peakZeroSupprSum", &bmEvent.peakZeroSupprSum, Form("peakZeroSupprSum[%d]/D", N_DETECTORS));
+        tree->Branch("deltaTimeNsLastTrigEvent", &bmEvent.deltaTimeNsLastTrigEvent);
         tree->Branch("nClusters", &bmEvent.nClusters, Form("nClusters[%d]/i", N_DETECTORS));
         tree->Branch("xBarycenter", &bmEvent.xBarycenter, Form("xBarycenter[%d]/D", N_DETECTORS));
         tree->Branch("yBarycenter", &bmEvent.yBarycenter, Form("yBarycenter/D"));
@@ -235,9 +242,21 @@ int main(int argc, char **argv){
     // check for event header if this is the first board
     if( not read_evt_header(inputDatFile, offset, verbose) ){ break; }
 
+    // reading header
     bmEvent.readTuple( read_de10_header(inputDatFile, offset, verbose) );
 
     if( not bmEvent.isGood ){ continue; }
+
+    bmEvent.timestampNs = bmEvent.timestamp * 20;
+    // DEBUG_VAR(fileTimestamp);
+    // DEBUG_VAR(bmEvent.timestampNs);
+    // DEBUG_VAR(bmEvent.timestampUtc);
+    bmEvent.timestampUtcNs = bmEvent.timestampNs + fileTimestamp;
+    if(bmEvent.lastTimestampNs != 0) {
+      bmEvent.deltaTimeNsLastEvent = long(bmEvent.timestampNs) - long(bmEvent.lastTimestampNs);
+    }
+    // DEBUG_VAR(bmEvent.timestamp);
+    bmEvent.lastTimestampNs = bmEvent.timestampNs;
 
     offset = bmEvent.offset;
     auto data = read_event(inputDatFile, offset, int(bmEvent.eventSize), verbose, false);
@@ -260,9 +279,10 @@ int main(int argc, char **argv){
       if( not calibFilePath.empty() ) {
         bmEvent.xBarycenter[iDet] = 0;
         for( size_t iCh = 0; iCh < N_CHANNELS; ++iCh ) {
+          if( iCh%64 == 0 or iCh%64 == 63 or iCh%64 == 1 or iCh%64 == 62 ){ continue; }
           bmEvent.peak[iDet][iCh] = static_cast<double>(bmEvent.peakAdc[iDet][iCh]) - peakBaseline[iDet][iCh];
 
-          if( zeroSuppress and bmEvent.peak[iDet][iCh] >= peakStdDev[iDet][iCh]*threshold ) {
+          if( useCalibThreshold and bmEvent.peak[iDet][iCh] >= peakStdDev[iDet][iCh]*threshold ) {
             bmEvent.peakZeroSuppr[iDet][iCh] = bmEvent.peak[iDet][iCh];
             bmEvent.xBarycenter[iDet] += double(iCh)*bmEvent.peakZeroSuppr[iDet][iCh];
             skip = false;
@@ -274,7 +294,7 @@ int main(int argc, char **argv){
               &bmEvent.peak[iDet][N_CHANNELS],
               0.0
             );
-        if( zeroSuppress ) {
+        if( useCalibThreshold ) {
           bmEvent.nClusters[iDet] = 0;
 
           bool isLastChOn = false;
@@ -302,13 +322,24 @@ int main(int argc, char **argv){
         }
       }
     }
-    // if( zeroSuppress and skip ){ continue; } // skip TTree::Fill();
+    if( useCalibThreshold and enableZeroSuppr and skip ){ continue; } // skip TTree::Fill();
 
-    if( ifBeamOutput.is_open() ) {
-      ifBeamOutput << "z,bpmonitor " << bmEvent.timestamp << " " << 0 << std::endl;
+    if( useCalibThreshold ){
+      if(bmEvent.lastTriggeredTimestampNs != 0) {
+        bmEvent.deltaTimeNsLastTrigEvent = long(bmEvent.timestampNs) - long(bmEvent.lastTriggeredTimestampNs);
+      }
+      bmEvent.lastTriggeredTimestampNs = bmEvent.timestampNs;
+    }
+
+    if( ifBeamOutput.is_open() and not (useCalibThreshold and skip) ) {
+      ifBeamOutput << "z,pdune " << bmEvent.timestampUtcNs << " " << 0 << std::endl;
       // <device_name>\t<timestamp_in_ms>\t<optional_unit_name>\t<scalar_value|string|null>\t<array_value|null>
-      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/triggerNumber\t" << bmEvent.timestamp << "\tnull\t" << bmEvent.triggerNumber << "\tnull" << std::endl;
-      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/nClusters[]\t" << bmEvent.timestamp << "\tnull\tnull\t{" << bmEvent.nClusters[0] << "," << bmEvent.nClusters[1] << "," << bmEvent.nClusters[2] << "}" << std::endl;
+      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/timestampNs\t" << bmEvent.timestampUtcNs << "\tnull\t" << bmEvent.timestampNs << "\tnull" << std::endl;
+      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/extTimestamp\t" << bmEvent.timestampUtcNs << "\tnull\t" << bmEvent.extTimestamp << "\tnull" << std::endl;
+      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/triggerNumber\t" << bmEvent.timestampUtcNs << "\tnull\t" << bmEvent.triggerNumber << "\tnull" << std::endl;
+      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/nClusters[]\t" << bmEvent.timestampUtcNs << "\tnull\tnull\t{" << bmEvent.nClusters[0] << "," << bmEvent.nClusters[1] << "," << bmEvent.nClusters[2] << "}" << std::endl;
+      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/xBarycenter[]\t" << bmEvent.timestampUtcNs << "\tnull\tnull\t{" << bmEvent.xBarycenter[0] << "," << bmEvent.xBarycenter[1] << "," << bmEvent.xBarycenter[2] << "}" << std::endl;
+      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/yBarycenter\t" << bmEvent.timestampUtcNs << "\tnull\t" << bmEvent.yBarycenter << "\tnull" << std::endl;
     }
 
     if( not skipEventTree ){ tree->Fill(); nWriten++; }
