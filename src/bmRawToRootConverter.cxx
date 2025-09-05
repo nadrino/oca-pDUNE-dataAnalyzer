@@ -53,6 +53,7 @@ int main(int argc, char **argv){
   parser.addTriggerOption("writeCalibData", {"--is-calib"}, "Will compute the baseline, the std-dev and create the calib TTree");
   parser.addTriggerOption("calcCovCalib", {"--cov"}, "Calculate covariance matrix of the std-dev");
   parser.addTriggerOption("skipEventTree", {"--skip-event"}, "Don't write the events TTree (useful if calib)");
+  parser.addTriggerOption("enableIfBeamOutput", {"-if"}, "Also generate .txt files for filling up the IFBeam database");
   parser.addTriggerOption("verbose", {"-v"}, "Enable verbode");
 
   LogInfo << parser.getDescription().str() << std::endl;
@@ -158,6 +159,25 @@ int main(int argc, char **argv){
     GenericToolbox::writeInTFile(outputRootFile.get(), TNamed("calibFilePath", calibFilePath.c_str()));
     calibTree->CloneTree()->Write();
   }
+
+
+  std::ofstream ifBeamOutput;
+  if( parser.isOptionTriggered("enableIfBeamOutput") ) {
+    std::filesystem::path ifBeamOutputPath(outputRootFilePath);
+    ifBeamOutputPath.replace_extension(".txt");
+    LogInfo << "Opening output IFBeam output txt file: " << ifBeamOutputPath << std::endl;
+    ifBeamOutput = std::ofstream(ifBeamOutputPath);
+    LogThrowIf(ifBeamOutput.fail(), "Could not open IFBeam output file: " << ifBeamOutputPath);
+
+// SCD_RUN00528_BEAM_20250904_065657.dat
+    std::string dateTimeStr = std::filesystem::path(inputDatFilePath).stem().string().substr(19, 15);
+    std::tm tmbuff = {};
+    std::stringstream ss(dateTimeStr);
+    ss >> std::get_time(&tmbuff, "%Y%m%d_%H%M%S");
+    std::time_t timestamp = std::mktime(&tmbuff);
+    size_t fileTimestamp = static_cast<size_t>(timestamp) * 1000; // Convert to milliseconds
+  }
+
 
   outputRootFile->cd();
   TTree* tree{nullptr};
@@ -282,7 +302,14 @@ int main(int argc, char **argv){
         }
       }
     }
-    if( zeroSuppress and skip ){ continue; } // skip TTree::Fill();
+    // if( zeroSuppress and skip ){ continue; } // skip TTree::Fill();
+
+    if( ifBeamOutput.is_open() ) {
+      ifBeamOutput << "z,bpmonitor " << bmEvent.timestamp << " " << 0 << std::endl;
+      // <device_name>\t<timestamp_in_ms>\t<optional_unit_name>\t<scalar_value|string|null>\t<array_value|null>
+      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/triggerNumber\t" << bmEvent.timestamp << "\tnull\t" << bmEvent.triggerNumber << "\tnull" << std::endl;
+      ifBeamOutput << "dip/acc/NORTH/NP02/BPM/nClusters[]\t" << bmEvent.timestamp << "\tnull\tnull\t{" << bmEvent.nClusters[0] << "," << bmEvent.nClusters[1] << "," << bmEvent.nClusters[2] << "}" << std::endl;
+    }
 
     if( not skipEventTree ){ tree->Fill(); nWriten++; }
 
