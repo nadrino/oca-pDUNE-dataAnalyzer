@@ -77,7 +77,7 @@ def main():
             '-i', str(file_path),
             '-c', os.path.join(output_folder, str(selected_cal_file.name).replace(".dat", ".root")),
             '-o', output_folder,
-            '-t', str(3),
+            '-t', str(6),
             '-if' # if beam .txt output
         ])
         
