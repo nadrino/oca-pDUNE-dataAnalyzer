@@ -35,8 +35,8 @@ def main():
     canvasPeak = ROOT.TCanvas("canvasPeak", "Peak Values by Detector", 1200, 800)
     canvasPeak.Divide(3, 2)
 
-    canvasPosition = ROOT.TCanvas("canvasPosition", "Position (Det 0)", 800, 800)
-    histPosition = ROOT.TH2D("histPosition", "Position;X Barycenter;Y Barycenter", 100, -192, 192, 100, -192, 192)
+    canvasPosition = ROOT.TCanvas("canvasPosition", "Position (Det 0)", 400, 400)
+    histPosition = ROOT.TH2D("histPosition", "Position;X Barycenter;Y Barycenter", 100, -210, 210, 100, -210, 210)
 
     hists = []
     histsSuppr = []
@@ -70,8 +70,8 @@ def main():
         canvasPeak.Update()
 
         # Update position plot
-        histPosition.Reset()
-        histPosition.Fill(tree.xBarycenterMean, tree.yBarycenter)
+        # histPosition.Reset()
+        histPosition.Fill(tree.xBarycenter[0], tree.yBarycenter)
         canvasPosition.cd()
         histPosition.Draw("COLZ")
         canvasPosition.Update()
