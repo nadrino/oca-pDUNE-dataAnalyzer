@@ -35,6 +35,11 @@ std::vector<T> reorder_DUNE(std::vector<T> const &v)
   return reordered_vec;
 }
 
+bool isChannelMasked(size_t iCh_){
+  if( iCh_%64 == 0 or iCh_%64 == 63 or iCh_%64 == 1 or iCh_%64 == 62 ){ return true; }
+  return false;
+}
+
 
 
 int main(int argc, char **argv){
@@ -282,9 +287,9 @@ int main(int argc, char **argv){
       if( not calibFilePath.empty() ) {
         bmEvent.xBarycenter[iDet] = 0;
         for( size_t iCh = 0; iCh < N_CHANNELS; ++iCh ) {
-          if( iCh%64 == 0 or iCh%64 == 63 or iCh%64 == 1 or iCh%64 == 62 ){ continue; }
           bmEvent.peak[iDet][iCh] = static_cast<double>(bmEvent.peakAdc[iDet][iCh]) - peakBaseline[iDet][iCh];
 
+          if( isChannelMasked(iCh) ){ continue; }
           if( useCalibThreshold and bmEvent.peak[iDet][iCh] >= peakStdDev[iDet][iCh]*threshold ) {
             bmEvent.peakZeroSuppr[iDet][iCh] = bmEvent.peak[iDet][iCh];
             bmEvent.xBarycenter[iDet] += double(iCh)*bmEvent.peakZeroSuppr[iDet][iCh];
@@ -302,13 +307,26 @@ int main(int argc, char **argv){
 
           bool isLastChOn = false;
           for( int iCh = 0; iCh < N_CHANNELS; ++iCh ) {
+            if( isChannelMasked(iCh) ){ continue; }
             if( bmEvent.peakZeroSuppr[iDet][iCh] > 0. ) {
               // count once
               if( not isLastChOn ) { bmEvent.nClusters[iDet]++; }
               isLastChOn = true;
             }
-            else{ isLastChOn = false; }
+            else if( bmEvent.peak[iDet][iCh] < peakStdDev[iDet][iCh]*threshold*0.95 ) {
+              // if close to the threshold don't recount
+              isLastChOn = false;
+            }
           }
+
+          // if( iDet == 0 and bmEvent.nClusters[iDet] >= 20 ) {
+          //   LogDebug << "MORE THAN: " << bmEvent.nClusters[iDet] << std::endl;
+          //   for( int iCh = 0; iCh < N_CHANNELS; ++iCh ) {
+          //     if( isChannelMasked(iCh) ){ continue; }
+          //     LogDebug << " " << iCh << " -> " << bmEvent.peakZeroSuppr[iDet][iCh] << std::endl;
+          //   }
+          //   std::exit(EXIT_SUCCESS);
+          // }
 
           bmEvent.peakZeroSupprSum[iDet] = std::accumulate(
               &bmEvent.peakZeroSuppr[iDet][0],
