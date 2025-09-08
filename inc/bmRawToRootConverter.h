@@ -40,6 +40,7 @@ struct BeamMonitorEventBuffer {
   double peakZeroSupprSum[N_DETECTORS]{};
   double xBarycenter[N_DETECTORS]{};
   double yBarycenter{};
+  double xBarycenterMean{};
 
   template<typename... Args> void readTuple(const std::tuple<Args...>& t_) {
     isGood = std::get<0>(t_);

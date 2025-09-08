@@ -219,6 +219,7 @@ int main(int argc, char **argv){
         tree->Branch("nClusters", &bmEvent.nClusters, Form("nClusters[%d]/i", N_DETECTORS));
         tree->Branch("xBarycenter", &bmEvent.xBarycenter, Form("xBarycenter[%d]/D", N_DETECTORS));
         tree->Branch("yBarycenter", &bmEvent.yBarycenter, Form("yBarycenter/D"));
+        tree->Branch("xBarycenterMean", &bmEvent.xBarycenterMean, Form("xBarycenterMean/D"));
       }
     }
   }
@@ -280,6 +281,7 @@ int main(int argc, char **argv){
 
     bool skip{true}; // if zeroSuppress and at no signal is over the threshold
     bmEvent.yBarycenter=0;
+    bmEvent.xBarycenterMean=0;
     for (size_t iDet = 0; iDet < N_DETECTORS; ++iDet) {
       memcpy(&bmEvent.peakAdc[iDet][0], &data[iDet * N_CHANNELS], N_CHANNELS * sizeof(unsigned int));
       bmEvent.peakAdcSum[iDet] = std::accumulate(
@@ -343,8 +345,17 @@ int main(int argc, char **argv){
           bmEvent.xBarycenter[iDet] -= double(N_CHANNELS)/2.;
 
           // bmEvent.yBarycenter += std::sin(double(iDet)*15.*M_PI/180.)*bmEvent.xBarycenter[iDet]/2.; // 2 detectors will give this info
-          if( iDet == 2 ){ bmEvent.yBarycenter += std::sin(15.*M_PI/180.)*bmEvent.xBarycenter[iDet]/2.; }
-          if( iDet == 1 ){ bmEvent.yBarycenter += std::sin(30.*M_PI/180.)*bmEvent.xBarycenter[iDet]/2.; }
+          if( iDet == 2 ) {
+            bmEvent.yBarycenter += std::sin(15.*M_PI/180.)*bmEvent.xBarycenter[iDet]/2.;
+            bmEvent.xBarycenterMean += std::cos(15.*M_PI/180.)*bmEvent.xBarycenter[iDet]/3.;
+          }
+          if( iDet == 1 ) {
+            bmEvent.yBarycenter += std::sin(30.*M_PI/180.)*bmEvent.xBarycenter[iDet]/2.;
+            bmEvent.xBarycenterMean += std::cos(30.*M_PI/180.)*bmEvent.xBarycenter[iDet]/3.;
+          }
+          else {
+            bmEvent.xBarycenterMean += bmEvent.xBarycenter[iDet]/3.;
+          }
         }
       }
     }
