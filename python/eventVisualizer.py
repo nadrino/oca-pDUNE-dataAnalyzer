@@ -35,6 +35,9 @@ def main():
     canvasPeak = ROOT.TCanvas("canvasPeak", "Peak Values by Detector", 1200, 800)
     canvasPeak.Divide(3, 2)
 
+    canvasPosition = ROOT.TCanvas("canvasPosition", "Position (Det 0)", 800, 800)
+    histPosition = ROOT.TH2D("histPosition", "Position;X Barycenter;Y Barycenter", 100, -192, 192, 100, -192, 192)
+
     hists = []
     histsSuppr = []
     for det in range(3):
@@ -63,6 +66,14 @@ def main():
             histsSuppr[det].Draw()
 
         canvasPeak.Update()
+
+        # Update position plot
+        histPosition.Reset()
+        histPosition.Fill(tree.xBarycenter[0], tree.yBarycenter)
+        canvasPosition.cd()
+        histPosition.Draw("COLZ")
+        canvasPosition.Update()
+
         ROOT.gPad.Update()
 
         # Process user input between events
