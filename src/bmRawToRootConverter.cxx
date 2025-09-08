@@ -242,6 +242,10 @@ int main(int argc, char **argv){
   auto iEvent{nEntries}; iEvent = 0;
   auto nWriten{iEvent};
   while( not inputDatFile.eof() ) {
+
+    // next offset
+    if( iEvent != 0 ){ offset = static_cast<uint64_t>(inputDatFile.tellg()) + padding_offset + 8; }
+
     iEvent++;
     GenericToolbox::displayProgressBar(iEvent, nEntries, "Writing events...");
 
@@ -288,6 +292,7 @@ int main(int argc, char **argv){
         bmEvent.xBarycenter[iDet] = 0;
         for( size_t iCh = 0; iCh < N_CHANNELS; ++iCh ) {
           bmEvent.peak[iDet][iCh] = static_cast<double>(bmEvent.peakAdc[iDet][iCh]) - peakBaseline[iDet][iCh];
+          bmEvent.peakZeroSuppr[iDet][iCh] = 0; // default
 
           if( isChannelMasked(iCh) ){ continue; }
           if( useCalibThreshold and bmEvent.peak[iDet][iCh] >= peakStdDev[iDet][iCh]*threshold ) {
@@ -343,7 +348,10 @@ int main(int argc, char **argv){
         }
       }
     }
-    if( useCalibThreshold and enableZeroSuppr and skip ){ continue; } // skip TTree::Fill();
+    if( useCalibThreshold and enableZeroSuppr and skip ) {
+      LogDebugIf(verbose) << "Skipping event: " << bmEvent.timestampUtcNs << std::endl;
+      continue;
+    } // skip TTree::Fill();
 
     if( useCalibThreshold ){
       if(bmEvent.lastTriggeredTimestampNs != 0) {
@@ -384,9 +392,6 @@ int main(int argc, char **argv){
         }
       }
     }
-
-    // next offset
-    offset = static_cast<uint64_t>(inputDatFile.tellg()) + padding_offset + 8;
 
   }
   if( not skipEventTree ) {

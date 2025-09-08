@@ -55,8 +55,10 @@ def main():
             hists[det].Reset()
             histsSuppr[det].Reset()
             for ch in range(384):
-                hists[det].Fill(ch, tree.peak[det][ch])
-                histsSuppr[det].Fill(ch, tree.peakZeroSuppr[det][ch])
+                hists[det].SetBinContent(ch + 1, tree.peak[det][ch])
+                histsSuppr[det].SetBinContent(ch + 1, tree.peakZeroSuppr[det][ch])
+                # hists[det].Fill(ch, tree.peak[det][ch])
+                # histsSuppr[det].Fill(ch, tree.peakZeroSuppr[det][ch])
 
             canvasPeak.cd(det + 1)
             hists[det].Draw()
