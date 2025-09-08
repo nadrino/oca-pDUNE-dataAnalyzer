@@ -71,7 +71,7 @@ def main():
 
         # Update position plot
         histPosition.Reset()
-        histPosition.Fill(tree.xBarycenter[0], tree.yBarycenter)
+        histPosition.Fill(tree.xBarycenterMean, tree.yBarycenter)
         canvasPosition.cd()
         histPosition.Draw("COLZ")
         canvasPosition.Update()

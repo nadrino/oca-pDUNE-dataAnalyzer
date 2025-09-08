@@ -293,10 +293,13 @@ int main(int argc, char **argv){
       if( not calibFilePath.empty() ) {
         bmEvent.xBarycenter[iDet] = 0;
         for( size_t iCh = 0; iCh < N_CHANNELS; ++iCh ) {
-          bmEvent.peak[iDet][iCh] = static_cast<double>(bmEvent.peakAdc[iDet][iCh]) - peakBaseline[iDet][iCh];
+          bmEvent.peak[iDet][iCh] = 0;
           bmEvent.peakZeroSuppr[iDet][iCh] = 0; // default
 
           if( isChannelMasked(iCh) ){ continue; }
+
+          bmEvent.peak[iDet][iCh] = static_cast<double>(bmEvent.peakAdc[iDet][iCh]) - peakBaseline[iDet][iCh];
+
           if( useCalibThreshold and bmEvent.peak[iDet][iCh] >= peakStdDev[iDet][iCh]*threshold ) {
             bmEvent.peakZeroSuppr[iDet][iCh] = bmEvent.peak[iDet][iCh];
             bmEvent.xBarycenter[iDet] += double(iCh)*bmEvent.peakZeroSuppr[iDet][iCh];
